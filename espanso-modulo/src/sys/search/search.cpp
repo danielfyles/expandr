@@ -42,7 +42,7 @@ const long DEFAULT_STYLE = wxSTAY_ON_TOP | wxRESIZE_BORDER;
 #endif
 #ifdef __LINUX__
 const int SEARCH_BAR_FONT_SIZE = 20;
-const long DEFAULT_STYLE = wxSTAY_ON_TOP;
+const long DEFAULT_STYLE = wxSTAY_ON_TOP | wxRESIZE_BORDER;
 #endif
 
 const int HELP_TEXT_FONT_SIZE = 10;
