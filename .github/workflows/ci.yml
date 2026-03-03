@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - macos-ci-test
   pull_request:
     paths-ignore:
       - ".devcontainer/**"
@@ -139,6 +142,8 @@ jobs:
           cargo build --target aarch64-apple-darwin
           rustup target add x86_64-apple-darwin
           cargo build --target x86_64-apple-darwin
+      - name: Test
+        run: cargo test --workspace
       - name: Clippy
         run: |
           cargo clippy --target=aarch64-apple-darwin -- --deny warnings
