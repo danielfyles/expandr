@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - macos-ci-test
   pull_request:
     paths-ignore:
       - ".devcontainer/**"
