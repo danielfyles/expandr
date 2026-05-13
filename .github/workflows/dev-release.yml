@@ -213,9 +213,9 @@ jobs:
     - run: |
         sudo snap install --classic --dangerous ${{ steps.build-snap.outputs.snap }}
     - uses: snapcore/action-publish@v1
+      if: startsWith(github.ref, 'refs/tags/')
       env:
         SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
       with:
         snap: ${{ steps.build-snap.outputs.snap }}
-        release: ${{ startsWith(github.ref, 'refs/tags/') && 'candidate' || 'edge'}}
-
+        release: candidate
