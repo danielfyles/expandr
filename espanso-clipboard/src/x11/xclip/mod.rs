@@ -31,8 +31,7 @@ pub struct XClipClipboard {
 impl XClipClipboard {
     pub fn new() -> Self {
         let command = Command::new("xclip").arg("-h").output();
-        let is_xclip_available = command
-            .is_ok_and(|output| output.status.success());
+        let is_xclip_available = command.is_ok_and(|output| output.status.success());
 
         Self { is_xclip_available }
     }
