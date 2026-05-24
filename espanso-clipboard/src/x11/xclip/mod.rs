@@ -32,8 +32,7 @@ impl XClipClipboard {
     pub fn new() -> Self {
         let command = Command::new("xclip").arg("-h").output();
         let is_xclip_available = command
-            .map(|output| output.status.success())
-            .unwrap_or(false);
+            .is_ok_and(|output| output.status.success());
 
         Self { is_xclip_available }
     }
