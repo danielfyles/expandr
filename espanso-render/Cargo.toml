@@ -12,7 +12,7 @@ enum-as-inner.workspace = true
 log.workspace = true
 regex.workspace = true
 thiserror.workspace = true
-rand = "0.8.3"
+rand = "0.8.6"
 sys-locale = "0.1.0"
 
 [lints]
