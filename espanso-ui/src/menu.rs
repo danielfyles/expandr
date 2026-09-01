@@ -40,10 +40,20 @@ pub enum MenuItem {
     Separator,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SimpleMenuItem {
     pub id: u32,
     pub label: String,
+    // Renders a native checkmark next to the item (e.g. NSMenuItem.state on macOS).
+    #[serde(default)]
+    pub checked: bool,
+    // Disabled items render greyed-out and non-clickable (used for status headers).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,6 +73,8 @@ mod tests {
                 MenuItem::Simple(SimpleMenuItem {
                     id: 0,
                     label: "Open".to_string(),
+                    checked: false,
+                    enabled: true,
                 }),
                 MenuItem::Separator,
                 MenuItem::Sub(SubMenuItem {
@@ -71,10 +83,14 @@ mod tests {
                         MenuItem::Simple(SimpleMenuItem {
                             label: "Sub 1".to_string(),
                             id: 1,
+                            checked: false,
+                            enabled: true,
                         }),
                         MenuItem::Simple(SimpleMenuItem {
                             label: "Sub 2".to_string(),
                             id: 2,
+                            checked: true,
+                            enabled: true,
                         }),
                     ],
                 }),
@@ -83,7 +99,7 @@ mod tests {
 
         assert_eq!(
             menu.to_json().unwrap(),
-            r#"[{"type":"simple","id":0,"label":"Open"},{"type":"separator"},{"type":"sub","label":"Sub","items":[{"type":"simple","id":1,"label":"Sub 1"},{"type":"simple","id":2,"label":"Sub 2"}]}]"#
+            r#"[{"type":"simple","id":0,"label":"Open","checked":false,"enabled":true},{"type":"separator"},{"type":"sub","label":"Sub","items":[{"type":"simple","id":1,"label":"Sub 1","checked":false,"enabled":true},{"type":"simple","id":2,"label":"Sub 2","checked":true,"enabled":true}]}]"#
         );
     }
 }

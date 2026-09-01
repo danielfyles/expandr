@@ -43,18 +43,50 @@ void addSubMenu(NSMenu * parent, NSArray * items);
 }
 
 - (void) setIcon: (int32_t)iconIndex {
-  if (options.show_icon) {
+  if (!options.show_icon) {
+    return;
+  }
+
+  NSImage *statusImage = nil;
+
+  // Prefer crisp, theme-aware SF Symbols that change shape by state so the
+  // menu-bar status is legible at a glance. The icon index maps to the
+  // TrayIcon order built on the Rust side: 0 = Normal, 1 = Disabled,
+  // 2 = SystemDisabled (e.g. macOS Secure Input).
+  if (@available(macOS 11.0, *)) {
+    NSString *symbolName;
+    NSString *desc;
+    switch (iconIndex) {
+      case 1:
+        symbolName = @"pause.circle";
+        desc = @"espanso disabled";
+        break;
+      case 2:
+        symbolName = @"exclamationmark.triangle";
+        desc = @"espanso needs attention";
+        break;
+      default:
+        symbolName = @"keyboard";
+        desc = @"espanso active";
+        break;
+    }
+    statusImage = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:desc];
+  }
+
+  // Fall back to the bundled PNG icons on older systems or if the symbol is
+  // unavailable.
+  if (statusImage == nil) {
     char * iconPath = options.icon_paths[iconIndex];
     NSString *nsIconPath = [NSString stringWithUTF8String:iconPath];
-
-    NSImage *statusImage = [[NSImage alloc] initWithContentsOfFile:nsIconPath];
-    [statusImage setTemplate:YES];
-
-    [statusItem.button setImage:statusImage];
-    [statusItem setHighlightMode:YES];
-    [statusItem.button setAction:@selector(statusIconClick:)];
-    [statusItem.button setTarget:self];
+    statusImage = [[NSImage alloc] initWithContentsOfFile:nsIconPath];
   }
+
+  [statusImage setTemplate:YES];
+
+  [statusItem.button setImage:statusImage];
+  [statusItem setHighlightMode:YES];
+  [statusItem.button setAction:@selector(statusIconClick:)];
+  [statusItem.button setTarget:self];
 }
 
 - (IBAction) statusIconClick: (id) sender {
@@ -120,9 +152,24 @@ void addSingleMenu(NSMenu * parent, id item)
   {
     return;
   }
-  NSMenuItem *newMenu = [[NSMenuItem alloc] initWithTitle:label action:@selector(contextMenuClick:) keyEquivalent:@""];
+
+  // A disabled item (e.g. the status header) carries no action, so NSMenu's
+  // automatic enabling greys it out and makes it non-clickable.
+  id enabled = [item objectForKey:@"enabled"];
+  BOOL isDisabled = (enabled != nil && [enabled isKindOfClass:[NSNumber class]] && ![enabled boolValue]);
+  SEL action = isDisabled ? nil : @selector(contextMenuClick:);
+
+  NSMenuItem *newMenu = [[NSMenuItem alloc] initWithTitle:label action:action keyEquivalent:@""];
   [newMenu setTag:(NSInteger)raw_id];
-  [parent addItem: newMenu]; 
+
+  // Render a native checkmark for toggle-style items.
+  id checked = [item objectForKey:@"checked"];
+  if (checked != nil && [checked isKindOfClass:[NSNumber class]] && [checked boolValue])
+  {
+    [newMenu setState:NSControlStateValueOn];
+  }
+
+  [parent addItem: newMenu];
 }
 
 void addSubMenu(NSMenu * parent, NSArray * items)

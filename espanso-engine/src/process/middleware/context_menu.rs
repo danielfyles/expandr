@@ -34,6 +34,8 @@ const CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND: u32 = 5;
 const CONTEXT_ITEM_OPEN_SEARCH: u32 = 6;
 const CONTEXT_ITEM_SHOW_LOGS: u32 = 7;
 const CONTEXT_ITEM_OPEN_CONFIG_FOLDER: u32 = 8;
+// Non-actionable status header shown at the top of the tray menu.
+const CONTEXT_ITEM_STATUS_HEADER: u32 = 9;
 
 pub struct ContextMenuMiddleware {
     is_enabled: RefCell<bool>,
@@ -62,58 +64,71 @@ impl Middleware for ContextMenuMiddleware {
             EventType::TrayIconClicked => {
                 // TODO: fetch top matches for the active config to be added
 
-                let mut items = vec![
-                    MenuItem::Simple(if *is_enabled {
-                        SimpleMenuItem {
-                            id: CONTEXT_ITEM_DISABLE,
-                            label: "Disable".to_string(),
-                        }
+                // Non-actionable header line reflecting espanso's current status,
+                // so the state is legible at a glance (native menu convention).
+                let status_label = if *is_secure_input_enabled {
+                    "espanso: secure input is blocking expansions"
+                } else if *is_enabled {
+                    "espanso: active"
+                } else {
+                    "espanso: disabled"
+                };
+                let status_header = MenuItem::Simple(SimpleMenuItem {
+                    id: CONTEXT_ITEM_STATUS_HEADER,
+                    label: status_label.to_string(),
+                    checked: false,
+                    enabled: false,
+                });
+
+                // Single toggle carrying a native checkmark instead of swapping
+                // the label between "Enable"/"Disable". Clicking it flips state.
+                let toggle_enabled = MenuItem::Simple(SimpleMenuItem {
+                    id: if *is_enabled {
+                        CONTEXT_ITEM_DISABLE
                     } else {
-                        SimpleMenuItem {
-                            id: CONTEXT_ITEM_ENABLE,
-                            label: "Enable".to_string(),
-                        }
-                    }),
-                    MenuItem::Simple(SimpleMenuItem {
-                        id: CONTEXT_ITEM_OPEN_SEARCH,
-                        label: "Open search bar".to_string(),
-                    }),
+                        CONTEXT_ITEM_ENABLE
+                    },
+                    label: "Enabled".to_string(),
+                    checked: *is_enabled,
+                    enabled: true,
+                });
+
+                let mut items = vec![
+                    status_header,
                     MenuItem::Separator,
-                    MenuItem::Simple(SimpleMenuItem {
-                        id: CONTEXT_ITEM_RELOAD,
-                        label: "Reload config".to_string(),
-                    }),
-                    MenuItem::Simple(SimpleMenuItem {
-                        id: CONTEXT_ITEM_OPEN_CONFIG_FOLDER,
-                        label: "Open config folder".to_string(),
-                    }),
-                    MenuItem::Simple(SimpleMenuItem {
-                        id: CONTEXT_ITEM_SHOW_LOGS,
-                        label: "Show logs".to_string(),
-                    }),
+                    toggle_enabled,
+                    MenuItem::Simple(SimpleMenuItem::new(
+                        CONTEXT_ITEM_OPEN_SEARCH,
+                        "Open search bar",
+                    )),
                     MenuItem::Separator,
-                    MenuItem::Simple(SimpleMenuItem {
-                        id: CONTEXT_ITEM_EXIT,
-                        label: "Exit espanso".to_string(),
-                    }),
+                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_RELOAD, "Reload config")),
+                    MenuItem::Simple(SimpleMenuItem::new(
+                        CONTEXT_ITEM_OPEN_CONFIG_FOLDER,
+                        "Open config folder",
+                    )),
+                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_SHOW_LOGS, "Show logs")),
+                    MenuItem::Separator,
+                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit espanso")),
                 ];
 
                 if *is_secure_input_enabled {
+                    // Surface the secure-input remedies right below the header.
                     items.insert(
-                        0,
-                        MenuItem::Simple(SimpleMenuItem {
-                            id: CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
-                            label: "Why is Espanso not working?".to_string(),
-                        }),
+                        2,
+                        MenuItem::Simple(SimpleMenuItem::new(
+                            CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
+                            "Why is espanso not working?",
+                        )),
                     );
                     items.insert(
-                        1,
-                        MenuItem::Simple(SimpleMenuItem {
-                            id: CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND,
-                            label: "Launch SecureInput auto-fix".to_string(),
-                        }),
+                        3,
+                        MenuItem::Simple(SimpleMenuItem::new(
+                            CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND,
+                            "Launch SecureInput auto-fix",
+                        )),
                     );
-                    items.insert(2, MenuItem::Separator);
+                    items.insert(4, MenuItem::Separator);
                 }
 
                 // TODO: my idea is to use a set of reserved u32 ids for built-in
@@ -175,10 +190,12 @@ impl Middleware for ContextMenuMiddleware {
                         ));
                         Event::caused_by(event.source_id, EventType::NOOP)
                     }
-                    9_u32..=u32::MAX => {
-                        // Should be unreachable, given there are no other options
-                        unreachable!()
+                    // The status header is non-actionable (disabled on macOS); on
+                    // platforms that still deliver its click, treat it as a no-op.
+                    CONTEXT_ITEM_STATUS_HEADER => {
+                        Event::caused_by(event.source_id, EventType::NOOP)
                     }
+                    _ => Event::caused_by(event.source_id, EventType::NOOP),
                 }
             }
             EventType::Disabled => {

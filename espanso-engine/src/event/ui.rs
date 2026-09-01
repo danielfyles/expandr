@@ -33,6 +33,24 @@ pub enum MenuItem {
 pub struct SimpleMenuItem {
     pub id: u32,
     pub label: String,
+    // Whether the item displays a checkmark (rendered natively, e.g. via
+    // `NSMenuItem.state` on macOS). Used for toggle-style items.
+    pub checked: bool,
+    // Whether the item is interactive. Disabled items render greyed-out and
+    // non-clickable — used for the non-actionable status header line.
+    pub enabled: bool,
+}
+
+impl SimpleMenuItem {
+    // A regular, clickable menu item with no checkmark.
+    pub fn new(id: u32, label: &str) -> Self {
+        Self {
+            id,
+            label: label.to_string(),
+            checked: false,
+            enabled: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
