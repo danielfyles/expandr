@@ -313,9 +313,18 @@ Files touched:
 Cross-platform: Windows/Linux menu JSON parsers ignore the new `checked`/`enabled`
 fields (graceful degradation; not yet tested on those platforms).
 
-**Not yet done:** Accessibility grant for the dev binary (only needed to test real
-expansion); commit to a branch. Deprecated `NSUserNotificationCenter` still in use
-(compiler warns) — modernization is a later workstream item.
+**Dev loop now verified end-to-end:** granted Accessibility to the dev binary
+(`target/release/espanso`) and confirmed a real expansion — typing `:devtest`
+expanded to `DEV-BUILD-OK`. This exercises the full native pipeline: global
+`NSEvent` detection (needs Accessibility) → match → render → `CGEvent` injection.
+Note: espanso does not log expansion content (privacy-first), so visual
+confirmation is the proof; there is no log trace by design.
+
+Accessibility caveat: the grant is tied to the binary's (ad-hoc) signature, so a
+rebuild can require re-granting. A stable dev cert or a packaged `.app` fixes this.
+
+**Deprecated `NSUserNotificationCenter`** still in use (compiler warns) —
+modernization is a later workstream item.
 
 ### 2026-09-01 — Rebrand to Expandr (tiers 1–2: branding + macOS identity) ✅
 
