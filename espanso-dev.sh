@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# Dev helper for running an espanso dev build SIDE-BY-SIDE with the installed
+# official Espanso.app, without any collision.
+#
+# Isolation strategy (see NATIVE_MAC_APP_PLAN.md):
+#   - separate config/runtime/package dirs under ~/espanso-dev
+#   - run the `daemon` directly (the no-modulo build's `launcher` is unimplemented,
+#     and `service start --unmanaged` shells out to that launcher)
+#   - never register a launchd service, never touch /usr/local/bin
+#   - ad-hoc sign the binary so its Accessibility grant survives rebuilds
+#
+# Usage:  ./espanso-dev.sh {build|start|stop|restart|log|status}
+#
+# NOTE: only ONE espanso instance should be actively expanding at a time.
+#       Disable the official one (its menu bar → Disable) while testing this build.
+
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN="$REPO/target/release/espanso"
+CARGO_BIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo"
+
+export ESPANSO_CONFIG_DIR="$HOME/espanso-dev/config"
+export ESPANSO_RUNTIME_DIR="$HOME/espanso-dev/runtime"
+export ESPANSO_PACKAGE_DIR="$HOME/espanso-dev/packages"
+export MAC_LAUNCH_CONTEXT=cli
+
+seed_config() {
+  mkdir -p "$ESPANSO_CONFIG_DIR/config" "$ESPANSO_CONFIG_DIR/match" \
+           "$ESPANSO_RUNTIME_DIR" "$ESPANSO_PACKAGE_DIR"
+  [ -f "$ESPANSO_CONFIG_DIR/config/default.yml" ] || \
+    cp "$REPO/espanso/src/res/config/default.yml" "$ESPANSO_CONFIG_DIR/config/default.yml"
+  if [ ! -f "$ESPANSO_CONFIG_DIR/match/base.yml" ]; then
+    cp "$REPO/espanso/src/res/config/base.yml" "$ESPANSO_CONFIG_DIR/match/base.yml"
+    cat >> "$ESPANSO_CONFIG_DIR/match/base.yml" <<'YAML'
+
+  - trigger: ":devtest"
+    replace: "DEV-BUILD-OK"
+YAML
+  fi
+}
+
+case "${1:-}" in
+  build)
+    # Fast build: no modulo (skips the vendored wxWidgets compile). Add
+    # `--features modulo,native-tls` (and `brew install automake`) for the GUI windows.
+    "$CARGO_BIN" build --release --no-default-features --features native-tls
+    codesign -s - --force "$BIN"
+    echo "built + ad-hoc signed: $BIN"
+    ;;
+  start)
+    seed_config
+    rm -f "$ESPANSO_RUNTIME_DIR"/*.lock 2>/dev/null || true
+    echo "starting dev daemon (isolated dirs under ~/espanso-dev)..."
+    nohup "$BIN" daemon >/dev/null 2>&1 &
+    echo "started (pid $!). Logs: ./espanso-dev.sh log"
+    ;;
+  stop)
+    pkill -f "$BIN worker" 2>/dev/null || true
+    pkill -f "$BIN daemon" 2>/dev/null || true
+    rm -f "$ESPANSO_RUNTIME_DIR"/*.lock 2>/dev/null || true
+    echo "stopped dev instance."
+    ;;
+  restart)
+    "$0" stop; "$0" start
+    ;;
+  log)
+    tail -n "${2:-40}" -f "$ESPANSO_RUNTIME_DIR/espanso.log"
+    ;;
+  status)
+    pgrep -fl "$BIN" || echo "dev instance not running"
+    ;;
+  *)
+    echo "usage: $0 {build|start|stop|restart|log|status}"; exit 1
+    ;;
+esac
