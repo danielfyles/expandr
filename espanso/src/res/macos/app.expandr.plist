@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.federicoterzi.espanso</string>
+    <string>app.expandr</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

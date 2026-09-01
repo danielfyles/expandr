@@ -101,7 +101,7 @@ void addSubMenu(NSMenu * parent, NSArray * items);
   NSError *jsonError;
   NSData *data = [payload dataUsingEncoding:NSUTF8StringEncoding];
   NSArray *jsonMenuItems = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:&jsonError];
-  NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Espanso"];
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Expandr"];
   addSubMenu(menu, jsonMenuItems);
   [statusItem popUpStatusItemMenu: menu];
 }
@@ -119,7 +119,7 @@ void addSubMenu(NSMenu * parent, NSArray * items);
 
 - (void) showNotification: (NSString *) message withDelay: (double) delay {
   NSUserNotification *notification = [[NSUserNotification alloc] init];
-  notification.title = @"Espanso";
+  notification.title = @"Expandr";
   notification.informativeText = message;
   notification.soundName = nil;
   

@@ -67,11 +67,11 @@ impl Middleware for ContextMenuMiddleware {
                 // Non-actionable header line reflecting espanso's current status,
                 // so the state is legible at a glance (native menu convention).
                 let status_label = if *is_secure_input_enabled {
-                    "espanso: secure input is blocking expansions"
+                    "Expandr: secure input is blocking expansions"
                 } else if *is_enabled {
-                    "espanso: active"
+                    "Expandr: active"
                 } else {
-                    "espanso: disabled"
+                    "Expandr: disabled"
                 };
                 let status_header = MenuItem::Simple(SimpleMenuItem {
                     id: CONTEXT_ITEM_STATUS_HEADER,
@@ -109,7 +109,7 @@ impl Middleware for ContextMenuMiddleware {
                     )),
                     MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_SHOW_LOGS, "Show logs")),
                     MenuItem::Separator,
-                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit espanso")),
+                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit Expandr")),
                 ];
 
                 if *is_secure_input_enabled {
@@ -118,7 +118,7 @@ impl Middleware for ContextMenuMiddleware {
                         2,
                         MenuItem::Simple(SimpleMenuItem::new(
                             CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
-                            "Why is espanso not working?",
+                            "Why is Expandr not working?",
                         )),
                     );
                     items.insert(

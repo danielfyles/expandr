@@ -263,6 +263,26 @@ conflicts — the App Store buys nothing here and is blocked anyway.
 reserve trademark rights and Apple's naming rules apply too — so any public fork
 should ship under a **distinct name**.
 
+### Product name: **Expandr**
+
+This fork will be branded **Expandr** (decided 2026-09-01), satisfying the
+distinct-name requirement above. Rename surface area, in tiers (build inward only
+as far as intended — deeper tiers cost upstream mergeability):
+
+1. **User-facing text** — menu-bar status header, notification title, app display
+   name / About. Low risk.
+2. **macOS identity** — `CFBundleName` "Expandr", `Expandr.app`, a new bundle id
+   **`app.expandr`** (reverse-DNS of the site domain **expandr.app**), launchd
+   label `app.expandr`. Needed for a real distinct app + separate
+   permission/notification identity.
+3. **Data dirs** — `~/Library/Application Support/Expandr`, runtime/cache dirs.
+   Makes it a clean standalone product but espanso configs won't auto-carry.
+4. **Deep rename** — binary name `expandr`, crate names, internal identifiers.
+   Maximal; **breaks Path A upstream mergeability** — avoid unless going macOS-only.
+
+Keeping tiers 1–2 (and leaving the internal codebase as `espanso`) preserves the
+ability to merge upstream fixes while presenting as Expandr to users and the OS.
+
 ---
 
 ## Progress log
@@ -296,4 +316,24 @@ fields (graceful degradation; not yet tested on those platforms).
 **Not yet done:** Accessibility grant for the dev binary (only needed to test real
 expansion); commit to a branch. Deprecated `NSUserNotificationCenter` still in use
 (compiler warns) — modernization is a later workstream item.
+
+### 2026-09-01 — Rebrand to Expandr (tiers 1–2: branding + macOS identity) ✅
+
+User-facing text + macOS identity now present as **Expandr**; internal codebase
+kept as `espanso` for upstream mergeability (per scope decision).
+
+- User-visible: menu status header ("Expandr: active/disabled/…"), "Exit Expandr",
+  "Why is Expandr not working?", notification + menu titles, CLI root/PATH/
+  translocation messages. Verified in the dev menu.
+- macOS identity: `CFBundleIdentifier app.expandr`, `CFBundleName`/`CFBundleDisplayName`
+  Expandr, launchd label `app.expandr` (plist renamed `app.expandr.plist`), bundle
+  output `Expandr.app`.
+- Kept as espanso: crate names, `espanso` binary + `CFBundleExecutable`, CLI command,
+  config/data dirs, upstream URLs (espanso.org, GitHub issue links).
+
+Files: `espanso/src/res/macos/Info.plist`, `.../app.expandr.plist` (renamed),
+`espanso/src/cli/service/macos.rs`, `espanso/src/path/macos.rs`,
+`espanso/src/cli/util.rs`, `espanso/src/cli/modulo/textview.rs`,
+`espanso-ui/src/mac/AppDelegate.mm`,
+`espanso-engine/src/process/middleware/context_menu.rs`, `scripts/create_bundle.sh`.
 

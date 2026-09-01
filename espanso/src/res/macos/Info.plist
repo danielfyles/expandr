@@ -12,7 +12,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.federicoterzi.espanso</string>
+	<string>app.expandr</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
@@ -20,7 +20,9 @@
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
 	<key>CFBundleName</key>
-	<string>Espanso</string>
+	<string>Expandr</string>
+	<key>CFBundleDisplayName</key>
+	<string>Expandr</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>
@@ -30,7 +32,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>VERSION</string>
 	<key>CFBundleGetInfoString</key>
-	<string>Espanso version VERSION (C) 2019-2021 Federico Terzi</string>
+	<string>Expandr version VERSION (C) 2019-2021 Federico Terzi</string>
 	<key>CFBundleLongVersionString</key>
 	<string>VERSION (C) 2019-2021 Federico Terzi</string>
 	<key>NSHumanReadableCopyright</key>

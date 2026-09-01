@@ -27,19 +27,19 @@ use crate::cli::util::prevent_running_as_root_on_macos;
 use crate::error_eprintln;
 
 #[cfg(target_os = "macos")]
-const SERVICE_PLIST_CONTENT: &str = include_str!("../../res/macos/com.federicoterzi.espanso.plist");
+const SERVICE_PLIST_CONTENT: &str = include_str!("../../res/macos/app.expandr.plist");
 #[cfg(target_os = "macos")]
-const SERVICE_PLIST_FILE_NAME: &str = "com.federicoterzi.espanso.plist";
+const SERVICE_PLIST_FILE_NAME: &str = "app.expandr.plist";
 
 pub fn register() -> Result<()> {
     prevent_running_as_root_on_macos();
 
     if crate::cli::util::is_subject_to_app_translocation_on_macos() {
-        error_eprintln!("Unable to register Espanso as service, please move the Espanso.app bundle inside the /Applications directory to proceed.");
+        error_eprintln!("Unable to register Expandr as service, please move the Expandr.app bundle inside the /Applications directory to proceed.");
         error_eprintln!(
             "For more information, please see: https://github.com/espanso/espanso/issues/844"
         );
-        bail!("macOS activated app-translocation on Espanso");
+        bail!("macOS activated app-translocation on Expandr");
     }
 
     let home_dir = dirs::home_dir().expect("could not get user home directory");
@@ -154,7 +154,7 @@ pub fn start_service() -> Result<()> {
     }
 
     let res = Command::new("launchctl")
-        .args(["start", "com.federicoterzi.espanso"])
+        .args(["start", "app.expandr"])
         .status();
 
     if let Ok(status) = res {
