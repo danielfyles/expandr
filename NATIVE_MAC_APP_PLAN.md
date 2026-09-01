@@ -320,8 +320,13 @@ expanded to `DEV-BUILD-OK`. This exercises the full native pipeline: global
 Note: espanso does not log expansion content (privacy-first), so visual
 confirmation is the proof; there is no log trace by design.
 
-Accessibility caveat: the grant is tied to the binary's (ad-hoc) signature, so a
-rebuild can require re-granting. A stable dev cert or a packaged `.app` fixes this.
+Accessibility persistence: **solved** via a stable self-signed dev cert
+(`scripts/setup-dev-signing.sh` creates the "Expandr Dev" identity in a dedicated
+keychain; `espanso-dev.sh build` signs with it, identifier `app.expandr.dev`).
+TCC keys the grant to the designated requirement (`certificate leaf = …`), which is
+constant across rebuilds — verified: a real code change altered the CDHash while the
+DR stayed identical and the grant persisted. Grant Accessibility once; rebuilds keep
+it. (Ad-hoc signing is still the fallback if the cert isn't set up.)
 
 **Deprecated `NSUserNotificationCenter`** still in use (compiler warns) —
 modernization is a later workstream item.
