@@ -46,8 +46,16 @@ case "${1:-}" in
     # Fast build: no modulo (skips the vendored wxWidgets compile). Add
     # `--features modulo,native-tls` (and `brew install automake`) for the GUI windows.
     "$CARGO_BIN" build --release --no-default-features --features native-tls
-    codesign -s - --force "$BIN"
-    echo "built + ad-hoc signed: $BIN"
+    # Sign with the stable "Expandr Dev" identity if present (see
+    # scripts/setup-dev-signing.sh) so the Accessibility grant survives rebuilds;
+    # otherwise fall back to ad-hoc (grant will need re-granting each build).
+    if security find-identity -p codesigning 2>/dev/null | grep -q "Expandr Dev"; then
+      codesign -s "Expandr Dev" --force --identifier app.expandr.dev "$BIN"
+      echo "built + signed with stable identity 'Expandr Dev': $BIN"
+    else
+      codesign -s - --force "$BIN"
+      echo "built + ad-hoc signed (run scripts/setup-dev-signing.sh for a stable grant): $BIN"
+    fi
     ;;
   start)
     seed_config
