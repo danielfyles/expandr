@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hardened-runtime entitlements for the notarized Expandr.app.
+
+    Expandr is NOT sandboxed (a text expander needs system-wide keyboard
+    monitoring + injection, which the App Store sandbox forbids — see
+    NATIVE_MAC_APP_PLAN.md). Accessibility / Input Monitoring are granted at
+    runtime via TCC, not by entitlement.
+
+    Expandr drives a few helper AppleScripts via `osascript` (app detection,
+    secure-input handling), so it may send Apple events to other apps:
+  -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+</dict>
+</plist>
