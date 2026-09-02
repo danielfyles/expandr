@@ -340,6 +340,31 @@ fields (graceful degradation; not yet tested on those platforms).
   release still needs a universal binary + Developer ID notarization (Apple account).
 - Fast dev loop stays no-`modulo` (`espanso-dev.sh`); the full build is for bundling.
 
+### 2026-09-01 — Native search bar ✅ (Workstream 2)
+
+Spotlight-style AppKit panel replacing the wxWidgets/modulo search on macOS
+(`espanso-ui/src/mac/SearchPanel.{h,mm}` + `ui_show_search` FFI; `NativeSearchUI`
+in `espanso/src/gui/native.rs`, wired in `engine/mod.rs`). Fuzzy filter, keyboard
+nav, light/dark, injects into the focused app. Works in the no-`modulo` dev build.
+
+**Bridge-pattern learnings (reuse for the snippet-builder + every native window):**
+- The `SearchUI::show()` contract is blocking on the *engine* thread; the panel
+  runs modally on the *main* thread via `dispatch_sync` + `runModalForWindow:`.
+- Use a **non-activating** `NSPanel` (`NSWindowStyleMaskNonactivatingPanel`,
+  `canBecomeKeyWindow=YES`) — it takes key focus WITHOUT activating espanso, so
+  the user's app stays frontmost (no Dock/⌘-Tab icon, injection lands). Promoting
+  to a regular app instead (activation policy) breaks both.
+- After a modal opened by a **hotkey**, clear espanso's modifier state on close
+  (`ModifierStateResetter`) — the panel holds focus so the global monitor misses
+  the modifier release, and the injector otherwise waits ~3s (`delay_modifiers`).
+- `stopModalWithCode:` needs a dummy event posted to return promptly.
+- JSON across the FFI: JSON `null` → `NSNull` → crashes on string messaging;
+  skip nulls in Rust AND guard `isKindOfClass:` in ObjC.
+
+**Still to polish (search):** visual refinement (field/placeholder sizing,
+row styling, empty state), click-outside-to-dismiss, and the panel currently has
+no result-count cap tuning. Functional path is solid.
+
 **Dev loop now verified end-to-end:** granted Accessibility to the dev binary
 (`target/release/espanso`) and confirmed a real expansion — typing `:devtest`
 expanded to `DEV-BUILD-OK`. This exercises the full native pipeline: global
