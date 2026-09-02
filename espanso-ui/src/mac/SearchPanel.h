@@ -23,10 +23,13 @@
 #import <Cocoa/Cocoa.h>
 #include <stdint.h>
 
-// Runs a modal Spotlight-style search panel on the current (main) thread.
-// `items` is an array of dictionaries: { "label": NSString, "trigger": NSString
-// (optional), "terms": NSArray<NSString> (optional) }.
-// Returns the ORIGINAL index of the chosen item, or -1 if the user cancelled.
-int32_t espanso_show_search_panel(NSString *hint, NSArray<NSDictionary *> *items);
+// Shows a Spotlight-style search panel NON-modally (must be called on the main
+// thread). `items` is an array of dictionaries: { "label": NSString, "trigger":
+// NSString (optional), "terms": NSArray<NSString> (optional) }. When the user
+// chooses (or cancels), `completion` is invoked with the ORIGINAL index of the
+// chosen item, or -1 if cancelled. Running non-modally (rather than a nested
+// modal loop) keeps the normal run loop live, so scrolling stays smooth.
+void espanso_show_search_panel(NSString *hint, NSArray<NSDictionary *> *items,
+                               void (^completion)(int32_t));
 
 #endif // ESPANSO_UI_SEARCH_PANEL_H

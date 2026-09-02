@@ -104,16 +104,18 @@ int32_t ui_show_search(char *hint, char *items_json)
       return -1;
     }
 
-    // The search panel is modal and must run on the main thread; the caller is
-    // the engine thread, so hop over and block until the user chooses.
+    // The panel is shown non-modally on the main thread; block THIS (engine)
+    // thread on a semaphore until the user chooses, so SearchUI::show() keeps
+    // its blocking contract without freezing the main run loop.
     __block int32_t result = -1;
-    if ([NSThread isMainThread]) {
-      result = espanso_show_search_panel(nsHint, items);
-    } else {
-      dispatch_sync(dispatch_get_main_queue(), ^(void) {
-        result = espanso_show_search_panel(nsHint, items);
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_main_queue(), ^(void) {
+      espanso_show_search_panel(nsHint, items, ^(int32_t chosen) {
+        result = chosen;
+        dispatch_semaphore_signal(done);
       });
-    }
+    });
+    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
     return result;
   }
 }

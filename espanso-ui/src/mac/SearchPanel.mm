@@ -55,6 +55,8 @@ static const NSInteger kMaxVisibleRows = 8;
     NSTableView *tableView;
     NSScrollView *scrollView;
     int32_t result;
+    void (^completion)(int32_t);
+    id selfRetain;  // keeps the controller alive while shown non-modally
 }
 @end
 
@@ -71,6 +73,23 @@ static const NSInteger kMaxVisibleRows = 8;
     return self;
 }
 
+// A resizable rounded-rect mask used to round the visual-effect (blur) view.
++ (NSImage *)roundedMaskWithRadius:(CGFloat)radius {
+    CGFloat d = radius * 2 + 1;
+    NSImage *img = [NSImage imageWithSize:NSMakeSize(d, d)
+                                  flipped:NO
+                           drawingHandler:^BOOL(NSRect rect) {
+                             [[NSColor blackColor] set];
+                             [[NSBezierPath bezierPathWithRoundedRect:rect
+                                                             xRadius:radius
+                                                             yRadius:radius] fill];
+                             return YES;
+                           }];
+    img.capInsets = NSEdgeInsetsMake(radius, radius, radius, radius);
+    img.resizingMode = NSImageResizingModeStretch;
+    return img;
+}
+
 - (void)buildWindowWithHint:(NSString *)hint {
     NSRect frame = NSMakeRect(0, 0, kPanelWidth, kFieldHeight);
     window = [[EspansoSearchWindow alloc]
@@ -84,14 +103,14 @@ static const NSInteger kMaxVisibleRows = 8;
     window.hasShadow = YES;
     window.releasedWhenClosed = NO;
 
-    // Rounded, blurred background that adapts to light/dark automatically.
+    // Translucent, blurred background that adapts to light/dark automatically.
+    // A rounded mask image rounds the *blur* itself (cornerRadius alone leaves a
+    // square blur backing behind the rounded content).
     NSVisualEffectView *bg = [[NSVisualEffectView alloc] initWithFrame:frame];
-    bg.material = NSVisualEffectMaterialHUDWindow;
+    bg.material = NSVisualEffectMaterialMenu;
     bg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
     bg.state = NSVisualEffectStateActive;
-    bg.wantsLayer = YES;
-    bg.layer.cornerRadius = kCornerRadius;
-    bg.layer.masksToBounds = YES;
+    bg.maskImage = [EspansoSearchController roundedMaskWithRadius:kCornerRadius];
     window.contentView = bg;
     contentView = bg;
 
@@ -239,24 +258,29 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     viewForTableColumn:(NSTableColumn *)col
                    row:(NSInteger)row {
     NSDictionary *item = allItems[[filtered[row] unsignedIntegerValue]];
+    // Content inset within the row so it sits inside the inset selection pill.
+    const CGFloat sideInset = 12;
     NSView *cell = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, kRowHeight)];
 
     NSTextField *label = [self plainLabel:15 color:[NSColor labelColor]];
     label.stringValue = stringValue(item[@"label"]) ?: @"";
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    [cell addSubview:label];
+
+    [label.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:sideInset].active = YES;
+    [label.centerYAnchor constraintEqualToAnchor:cell.centerYAnchor].active = YES;
 
     NSString *trigger = stringValue(item[@"trigger"]);
-    CGFloat rightEdge = kPanelWidth - 14;
     if (trigger.length > 0) {
         NSView *badge = [self triggerBadge:trigger];
-        CGFloat bw = badge.frame.size.width;
-        badge.frame = NSMakeRect(rightEdge - bw, (kRowHeight - badge.frame.size.height) / 2.0,
-                                 bw, badge.frame.size.height);
+        badge.translatesAutoresizingMaskIntoConstraints = NO;
         [cell addSubview:badge];
-        rightEdge = badge.frame.origin.x - 10;
+        [badge.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor constant:-sideInset].active = YES;
+        [badge.centerYAnchor constraintEqualToAnchor:cell.centerYAnchor].active = YES;
+        [label.trailingAnchor constraintLessThanOrEqualToAnchor:badge.leadingAnchor constant:-10].active = YES;
+    } else {
+        [label.trailingAnchor constraintLessThanOrEqualToAnchor:cell.trailingAnchor constant:-sideInset].active = YES;
     }
-
-    label.frame = NSMakeRect(14, 0, rightEdge - 14, kRowHeight);
-    [cell addSubview:label];
     return cell;
 }
 
@@ -274,26 +298,28 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     return f;
 }
 
-// A small rounded "pill" showing the trigger, like Raycast/Alfred.
+// A small rounded "pill" showing the trigger, like Raycast/Alfred. Sized by its
+// text via Auto Layout, vertically centred on the row by the caller.
 - (NSView *)triggerBadge:(NSString *)trigger {
-    NSFont *font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightMedium];
-    NSSize textSize = [trigger sizeWithAttributes:@{NSFontAttributeName : font}];
-    CGFloat padX = 8, padY = 3;
-    CGFloat h = ceil(textSize.height) + 2 * padY;
-    CGFloat w = ceil(textSize.width) + 2 * padX;
-
-    NSView *badge = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)];
+    NSView *badge = [[NSView alloc] init];
     badge.wantsLayer = YES;
     badge.layer.cornerRadius = 5;
     badge.layer.backgroundColor =
         [[NSColor secondaryLabelColor] colorWithAlphaComponent:0.14].CGColor;
 
     NSTextField *t = [self plainLabel:12 color:[NSColor secondaryLabelColor]];
-    t.font = font;
+    t.font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightMedium];
     t.stringValue = trigger;
-    t.alignment = NSTextAlignmentCenter;
-    t.frame = NSMakeRect(0, (h - textSize.height) / 2.0 - 1, w, textSize.height + 2);
+    t.translatesAutoresizingMaskIntoConstraints = NO;
     [badge addSubview:t];
+
+    const CGFloat padX = 8, padY = 3;
+    [NSLayoutConstraint activateConstraints:@[
+        [t.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:padX],
+        [t.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-padX],
+        [t.topAnchor constraintEqualToAnchor:badge.topAnchor constant:padY],
+        [t.bottomAnchor constraintEqualToAnchor:badge.bottomAnchor constant:-padY],
+    ]];
     return badge;
 }
 
@@ -338,24 +364,18 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)finish {
     [window orderOut:nil];
-    [NSApp stopModalWithCode:(result >= 0 ? NSModalResponseOK : NSModalResponseCancel)];
-    // stopModal only takes effect on the modal loop's next event; post a dummy
-    // one so runModalForWindow: returns immediately rather than hanging.
-    NSEvent *wake = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
-                                       location:NSZeroPoint
-                                  modifierFlags:0
-                                      timestamp:0
-                                   windowNumber:0
-                                        context:nil
-                                        subtype:0
-                                          data1:0
-                                          data2:0];
-    [NSApp postEvent:wake atStart:YES];
+    void (^c)(int32_t) = completion;
+    completion = nil;
+    if (c) c(result);
+    selfRetain = nil;  // allow deallocation now that we're done
 }
 
-// ------------------------------- run --------------------------------------
+// ------------------------------- show -------------------------------------
 
-- (int32_t)run {
+- (void)showWithCompletion:(void (^)(int32_t))c {
+    completion = [c copy];
+    selfRetain = self;
+
     NSScreen *screen = [NSScreen mainScreen];
     NSRect vf = screen.visibleFrame;
     NSRect wf = window.frame;
@@ -364,21 +384,18 @@ doCommandBySelector:(SEL)commandSelector {
     [window setFrameOrigin:NSMakePoint(x, y)];
 
     // Take key focus for typing WITHOUT activating espanso, so the app the user
-    // was in stays frontmost and the selected expansion injects into it.
+    // was in stays frontmost and the selected expansion injects into it. Shown
+    // non-modally so the normal run loop drives smooth scrolling / momentum.
     [window orderFrontRegardless];
     [window makeKeyWindow];
     [window makeFirstResponder:searchField];
-
-    [NSApp runModalForWindow:window];
-    return result;
 }
 
 @end
 
-int32_t espanso_show_search_panel(NSString *hint, NSArray<NSDictionary *> *items) {
-    @autoreleasepool {
-        EspansoSearchController *controller =
-            [[EspansoSearchController alloc] initWithItems:items hint:hint];
-        return [controller run];
-    }
+void espanso_show_search_panel(NSString *hint, NSArray<NSDictionary *> *items,
+                               void (^completion)(int32_t)) {
+    EspansoSearchController *controller =
+        [[EspansoSearchController alloc] initWithItems:items hint:hint];
+    [controller showWithCompletion:completion];
 }

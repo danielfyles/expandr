@@ -59,10 +59,19 @@ fn cc_config() {
         .include("src/mac/SearchPanel.h")
         .file("src/mac/native.mm")
         .file("src/mac/AppDelegate.mm")
-        .file("src/mac/SearchPanel.mm")
         .compile("espansoui");
+    // SearchPanel manages view/block lifetimes that are painful (and were buggy)
+    // under manual retain/release, so build it under ARC, separately from the
+    // MRC files above (which use explicit retain/release).
+    cc::Build::new()
+        .cpp(true)
+        .flag("-fobjc-arc")
+        .include("src/mac/SearchPanel.h")
+        .file("src/mac/SearchPanel.mm")
+        .compile("espansoui_search");
     println!("cargo:rustc-link-lib=dylib=c++");
     println!("cargo:rustc-link-lib=static=espansoui");
+    println!("cargo:rustc-link-lib=static=espansoui_search");
     println!("cargo:rustc-link-lib=framework=Cocoa");
     println!("cargo:rustc-link-lib=framework=IOKit");
 }
