@@ -19,14 +19,17 @@
 
 #import "SearchPanel.h"
 
-static const CGFloat kPanelWidth = 640.0;
-static const CGFloat kFieldHeight = 46.0;
-static const CGFloat kRowHeight = 42.0;
+static const CGFloat kPanelWidth = 620.0;
+static const CGFloat kCornerRadius = 14.0;
+static const CGFloat kInset = 20.0;        // horizontal content inset
+static const CGFloat kFieldHeight = 54.0;  // search field row
+static const CGFloat kSearchIconSize = 19.0;
+static const CGFloat kRowHeight = 40.0;
 static const NSInteger kMaxVisibleRows = 8;
 
 // ---------------------------------------------------------------------------
-// A borderless panel that is allowed to become key/main so its text field can
-// receive keystrokes even though espanso is a menu-bar (accessory) app.
+// A borderless panel that can become key so its field receives keystrokes even
+// though espanso is a menu-bar (accessory) app.
 // ---------------------------------------------------------------------------
 @interface EspansoSearchWindow : NSPanel
 @end
@@ -37,19 +40,21 @@ static const NSInteger kMaxVisibleRows = 8;
 @end
 
 // ---------------------------------------------------------------------------
-// Controller: owns the field + table, does the filtering and key handling, and
-// drives a modal session that returns the chosen original index.
+// Controller
 // ---------------------------------------------------------------------------
 @interface EspansoSearchController
-    : NSObject <NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSWindowDelegate> {
+    : NSObject <NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate> {
 @public
-    NSArray<NSDictionary *> *allItems;    // original items
-    NSMutableArray<NSNumber *> *filtered; // original indices matching the query
+    NSArray<NSDictionary *> *allItems;
+    NSMutableArray<NSNumber *> *filtered;
     NSPanel *window;
+    NSView *contentView;
+    NSImageView *searchIcon;
     NSTextField *searchField;
+    NSBox *separator;
     NSTableView *tableView;
     NSScrollView *scrollView;
-    int32_t result;                       // chosen original index, or -1
+    int32_t result;
 }
 @end
 
@@ -68,9 +73,6 @@ static const NSInteger kMaxVisibleRows = 8;
 
 - (void)buildWindowWithHint:(NSString *)hint {
     NSRect frame = NSMakeRect(0, 0, kPanelWidth, kFieldHeight);
-    // A non-activating panel can take key focus for text input WITHOUT
-    // activating espanso, so the app the user was typing into stays frontmost
-    // (keeps injection working) and espanso never shows a Dock / Cmd-Tab icon.
     window = [[EspansoSearchWindow alloc]
         initWithContentRect:frame
                   styleMask:(NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel)
@@ -80,7 +82,6 @@ static const NSInteger kMaxVisibleRows = 8;
     window.opaque = NO;
     window.backgroundColor = [NSColor clearColor];
     window.hasShadow = YES;
-    window.delegate = self;
     window.releasedWhenClosed = NO;
 
     // Rounded, blurred background that adapts to light/dark automatically.
@@ -89,42 +90,63 @@ static const NSInteger kMaxVisibleRows = 8;
     bg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
     bg.state = NSVisualEffectStateActive;
     bg.wantsLayer = YES;
-    bg.layer.cornerRadius = 12.0;
+    bg.layer.cornerRadius = kCornerRadius;
     bg.layer.masksToBounds = YES;
     window.contentView = bg;
+    contentView = bg;
+
+    // Leading search glyph
+    searchIcon = [[NSImageView alloc] init];
+    if (@available(macOS 11.0, *)) {
+        searchIcon.image = [NSImage imageWithSystemSymbolName:@"magnifyingglass"
+                                    accessibilityDescription:nil];
+    }
+    searchIcon.contentTintColor = [NSColor secondaryLabelColor];
+    searchIcon.imageScaling = NSImageScaleProportionallyUpOrDown;
+    [bg addSubview:searchIcon];
 
     // Search field
-    searchField = [[NSTextField alloc] initWithFrame:NSMakeRect(16, 0, kPanelWidth - 32, kFieldHeight)];
-    searchField.font = [NSFont systemFontOfSize:22 weight:NSFontWeightRegular];
+    searchField = [[NSTextField alloc] init];
+    searchField.font = [NSFont systemFontOfSize:20 weight:NSFontWeightRegular];
     searchField.bezeled = NO;
     searchField.bordered = NO;
     searchField.drawsBackground = NO;
     searchField.focusRingType = NSFocusRingTypeNone;
     searchField.delegate = self;
-    searchField.placeholderString = (hint.length > 0) ? hint : @"Search your snippets…";
+    searchField.textColor = [NSColor labelColor];
+    searchField.placeholderString =
+        (hint.length > 0 && hint.length <= 42) ? hint : @"Search snippets…";
     [(NSTextFieldCell *)searchField.cell setWraps:NO];
     [(NSTextFieldCell *)searchField.cell setScrollable:YES];
     [bg addSubview:searchField];
     window.initialFirstResponder = searchField;
 
-    // Results table inside a scroll view
+    // Divider between field and list
+    separator = [[NSBox alloc] init];
+    separator.boxType = NSBoxSeparator;
+    [bg addSubview:separator];
+
+    // Results table
     scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, 0)];
     scrollView.hasVerticalScroller = YES;
     scrollView.drawsBackground = NO;
     scrollView.borderType = NSNoBorder;
     scrollView.automaticallyAdjustsContentInsets = NO;
+    scrollView.scrollerStyle = NSScrollerStyleOverlay;
 
     tableView = [[NSTableView alloc] initWithFrame:scrollView.bounds];
     tableView.headerView = nil;
     tableView.backgroundColor = [NSColor clearColor];
     tableView.rowHeight = kRowHeight;
-    tableView.intercellSpacing = NSMakeSize(0, 0);
+    tableView.intercellSpacing = NSMakeSize(0, 2);
     tableView.selectionHighlightStyle = NSTableViewSelectionHighlightStyleRegular;
+    if (@available(macOS 11.0, *)) {
+        tableView.style = NSTableViewStyleInset;  // rounded, inset selection
+    }
     tableView.dataSource = self;
     tableView.delegate = self;
-    tableView.action = @selector(tableClicked:);
-    tableView.target = self;
     tableView.doubleAction = @selector(tableDoubleClicked:);
+    tableView.target = self;
     NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"main"];
     col.width = kPanelWidth;
     [tableView addTableColumn:col];
@@ -132,10 +154,23 @@ static const NSInteger kMaxVisibleRows = 8;
     [bg addSubview:scrollView];
 }
 
+// Lay out the chrome for a given total window height (list grows below field).
+- (void)layoutChrome:(CGFloat)total {
+    CGFloat fieldTop = total - kFieldHeight;
+    searchIcon.frame = NSMakeRect(kInset, fieldTop + (kFieldHeight - kSearchIconSize) / 2.0,
+                                  kSearchIconSize, kSearchIconSize);
+    CGFloat fieldX = kInset + kSearchIconSize + 12;
+    CGFloat fieldH = 26;
+    searchField.frame = NSMakeRect(fieldX, fieldTop + (kFieldHeight - fieldH) / 2.0,
+                                   kPanelWidth - fieldX - kInset, fieldH);
+    BOOL hasRows = filtered.count > 0;
+    separator.frame = NSMakeRect(kInset, fieldTop, kPanelWidth - 2 * kInset, 1);
+    separator.hidden = !hasRows;
+    scrollView.frame = NSMakeRect(0, 0, kPanelWidth, hasRows ? fieldTop : 0);
+}
+
 // ------------------------------ filtering ---------------------------------
 
-// Safely read an NSString value from a JSON dictionary (JSON null decodes to
-// NSNull, which crashes on NSString messaging).
 static NSString *stringValue(id v) {
     return [v isKindOfClass:[NSString class]] ? (NSString *)v : nil;
 }
@@ -154,7 +189,6 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
             if (ts) { [hay appendString:@" "]; [hay appendString:ts]; }
         }
     }
-    // subsequence (fuzzy) match: every query char appears in order
     NSString *lowHay = hay.lowercaseString;
     NSString *lowQ = q.lowercaseString;
     NSUInteger hi = 0, hn = lowHay.length;
@@ -184,63 +218,84 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
 
 - (void)resizeToFit {
     NSInteger rows = MIN((NSInteger)filtered.count, kMaxVisibleRows);
-    CGFloat listHeight = rows * kRowHeight;
-    CGFloat total = kFieldHeight + (rows > 0 ? listHeight + 1 : 0);
+    CGFloat listHeight = rows > 0 ? rows * (kRowHeight + 2) + 8 : 0;
+    CGFloat total = kFieldHeight + listHeight;
 
     NSRect wf = window.frame;
     CGFloat dy = total - wf.size.height;   // grow from the top downwards
     wf.origin.y -= dy;
     wf.size.height = total;
     [window setFrame:wf display:YES];
-
-    NSView *bg = window.contentView;
-    searchField.frame = NSMakeRect(16, total - kFieldHeight, kPanelWidth - 32, kFieldHeight);
-    scrollView.frame = NSMakeRect(0, 0, kPanelWidth, total - kFieldHeight);
-    (void)bg;
+    [self layoutChrome:total];
 }
 
 // --------------------------- table data/view ------------------------------
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tv { return filtered.count; }
 
+- (CGFloat)tableView:(NSTableView *)tv heightOfRow:(NSInteger)row { return kRowHeight; }
+
 - (NSView *)tableView:(NSTableView *)tv
     viewForTableColumn:(NSTableColumn *)col
                    row:(NSInteger)row {
     NSDictionary *item = allItems[[filtered[row] unsignedIntegerValue]];
-
     NSView *cell = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, kRowHeight)];
 
-    NSTextField *label = [self makeLabelWithSize:15 color:[NSColor labelColor] bold:NO];
+    NSTextField *label = [self plainLabel:15 color:[NSColor labelColor]];
     label.stringValue = stringValue(item[@"label"]) ?: @"";
-    label.frame = NSMakeRect(18, 0, kPanelWidth - 220, kRowHeight);
-    [cell addSubview:label];
 
     NSString *trigger = stringValue(item[@"trigger"]);
+    CGFloat rightEdge = kPanelWidth - 14;
     if (trigger.length > 0) {
-        NSTextField *tag = [self makeLabelWithSize:13 color:[NSColor secondaryLabelColor] bold:NO];
-        tag.stringValue = trigger;
-        tag.alignment = NSTextAlignmentRight;
-        tag.frame = NSMakeRect(kPanelWidth - 196, 0, 178, kRowHeight);
-        [cell addSubview:tag];
+        NSView *badge = [self triggerBadge:trigger];
+        CGFloat bw = badge.frame.size.width;
+        badge.frame = NSMakeRect(rightEdge - bw, (kRowHeight - badge.frame.size.height) / 2.0,
+                                 bw, badge.frame.size.height);
+        [cell addSubview:badge];
+        rightEdge = badge.frame.origin.x - 10;
     }
+
+    label.frame = NSMakeRect(14, 0, rightEdge - 14, kRowHeight);
+    [cell addSubview:label];
     return cell;
 }
 
-- (NSTextField *)makeLabelWithSize:(CGFloat)size color:(NSColor *)color bold:(BOOL)bold {
+- (NSTextField *)plainLabel:(CGFloat)size color:(NSColor *)color {
     NSTextField *f = [[NSTextField alloc] init];
     f.bezeled = NO;
     f.bordered = NO;
     f.editable = NO;
     f.selectable = NO;
     f.drawsBackground = NO;
-    f.font = [NSFont systemFontOfSize:size weight:(bold ? NSFontWeightSemibold : NSFontWeightRegular)];
+    f.font = [NSFont systemFontOfSize:size weight:NSFontWeightRegular];
     f.textColor = color;
     f.lineBreakMode = NSLineBreakByTruncatingTail;
     [(NSTextFieldCell *)f.cell setUsesSingleLineMode:YES];
     return f;
 }
 
-- (CGFloat)tableView:(NSTableView *)tv heightOfRow:(NSInteger)row { return kRowHeight; }
+// A small rounded "pill" showing the trigger, like Raycast/Alfred.
+- (NSView *)triggerBadge:(NSString *)trigger {
+    NSFont *font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightMedium];
+    NSSize textSize = [trigger sizeWithAttributes:@{NSFontAttributeName : font}];
+    CGFloat padX = 8, padY = 3;
+    CGFloat h = ceil(textSize.height) + 2 * padY;
+    CGFloat w = ceil(textSize.width) + 2 * padX;
+
+    NSView *badge = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)];
+    badge.wantsLayer = YES;
+    badge.layer.cornerRadius = 5;
+    badge.layer.backgroundColor =
+        [[NSColor secondaryLabelColor] colorWithAlphaComponent:0.14].CGColor;
+
+    NSTextField *t = [self plainLabel:12 color:[NSColor secondaryLabelColor]];
+    t.font = font;
+    t.stringValue = trigger;
+    t.alignment = NSTextAlignmentCenter;
+    t.frame = NSMakeRect(0, (h - textSize.height) / 2.0 - 1, w, textSize.height + 2);
+    [badge addSubview:t];
+    return badge;
+}
 
 // ----------------------------- interaction --------------------------------
 
@@ -248,26 +303,13 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     [self filter:searchField.stringValue];
 }
 
-// Arrow/Enter/Esc handling while typing in the field.
 - (BOOL)control:(NSControl *)control
        textView:(NSTextView *)textView
 doCommandBySelector:(SEL)commandSelector {
-    if (commandSelector == @selector(moveDown:)) {
-        [self moveSelectionBy:1];
-        return YES;
-    }
-    if (commandSelector == @selector(moveUp:)) {
-        [self moveSelectionBy:-1];
-        return YES;
-    }
-    if (commandSelector == @selector(insertNewline:)) {
-        [self commitSelection];
-        return YES;
-    }
-    if (commandSelector == @selector(cancelOperation:)) {
-        [self cancel];
-        return YES;
-    }
+    if (commandSelector == @selector(moveDown:)) { [self moveSelectionBy:1]; return YES; }
+    if (commandSelector == @selector(moveUp:)) { [self moveSelectionBy:-1]; return YES; }
+    if (commandSelector == @selector(insertNewline:)) { [self commitSelection]; return YES; }
+    if (commandSelector == @selector(cancelOperation:)) { [self cancel]; return YES; }
     return NO;
 }
 
@@ -279,7 +321,6 @@ doCommandBySelector:(SEL)commandSelector {
     [tableView scrollRowToVisible:row];
 }
 
-- (void)tableClicked:(id)sender { /* selection follows click automatically */ }
 - (void)tableDoubleClicked:(id)sender { [self commitSelection]; }
 
 - (void)commitSelection {
@@ -298,10 +339,8 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)finish {
     [window orderOut:nil];
     [NSApp stopModalWithCode:(result >= 0 ? NSModalResponseOK : NSModalResponseCancel)];
-    // stopModal only takes effect when the modal loop next processes an event;
-    // post a dummy one so runModalForWindow: returns immediately instead of
-    // hanging until some stray event arrives (which caused a long delay before
-    // the expansion was injected).
+    // stopModal only takes effect on the modal loop's next event; post a dummy
+    // one so runModalForWindow: returns immediately rather than hanging.
     NSEvent *wake = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
                                        location:NSZeroPoint
                                   modifierFlags:0
@@ -317,7 +356,6 @@ doCommandBySelector:(SEL)commandSelector {
 // ------------------------------- run --------------------------------------
 
 - (int32_t)run {
-    // Position: horizontally centred, upper third of the active screen.
     NSScreen *screen = [NSScreen mainScreen];
     NSRect vf = screen.visibleFrame;
     NSRect wf = window.frame;
@@ -325,9 +363,8 @@ doCommandBySelector:(SEL)commandSelector {
     CGFloat y = vf.origin.y + vf.size.height * 0.62;
     [window setFrameOrigin:NSMakePoint(x, y)];
 
-    // Take key focus for typing WITHOUT activating espanso (non-activating
-    // panel), so the app the user was in stays frontmost and active — the
-    // selected expansion then injects straight into it.
+    // Take key focus for typing WITHOUT activating espanso, so the app the user
+    // was in stays frontmost and the selected expansion injects into it.
     [window orderFrontRegardless];
     [window makeKeyWindow];
     [window makeFirstResponder:searchField];
