@@ -115,8 +115,6 @@ pub fn initialize_and_spawn(
             let modulo_manager = crate::gui::modulo::manager::ModuloManager::new();
             let modulo_form_ui =
                 crate::gui::modulo::form::ModuloFormUI::new(&modulo_manager, &config_manager);
-            let modulo_search_ui =
-                crate::gui::modulo::search::ModuloSearchUI::new(&modulo_manager, &config_manager);
             let modulo_text_ui = crate::gui::modulo::textview::ModuloTextUI::new(&modulo_manager);
 
             let context: Box<dyn Context> = Box::new(super::context::DefaultContext::new(
@@ -144,6 +142,22 @@ pub fn initialize_and_spawn(
                         .win32_keyboard_layout_cache_interval(),
                 })
                 .expect("failed to initialize detector module");
+
+            // Search UI: native AppKit panel on macOS, wxWidgets/modulo elsewhere.
+            // Built after the funnel so the native panel can clear stale modifier
+            // state on close (the modal steals focus and hides the modifier
+            // release from espanso's global monitor).
+            #[cfg(not(target_os = "macos"))]
+            let modulo_search_ui =
+                crate::gui::modulo::search::ModuloSearchUI::new(&modulo_manager, &config_manager);
+            #[cfg(target_os = "macos")]
+            let native_search_ui =
+                crate::gui::native::NativeSearchUI::new(&config_manager, &modifier_state_store);
+            #[cfg(target_os = "macos")]
+            let search_ui: &dyn crate::gui::SearchUI = &native_search_ui;
+            #[cfg(not(target_os = "macos"))]
+            let search_ui: &dyn crate::gui::SearchUI = &modulo_search_ui;
+
             let exit_source = super::engine::funnel::exit::ExitSource::new(exit_signal, &sequencer);
             let ipc_event_source =
                 super::engine::funnel::ipc::IpcEventSource::new(ipc_event_receiver, &sequencer);
@@ -176,7 +190,7 @@ pub fn initialize_and_spawn(
                     super::engine::process::middleware::matcher::MatcherState,
                 >,
             > = vec![&rolling_matcher, &regex_matcher];
-            let selector = MatchSelectorAdapter::new(&modulo_search_ui, &combined_match_cache);
+            let selector = MatchSelectorAdapter::new(search_ui, &combined_match_cache);
             let multiplexer = MultiplexAdapter::new(&combined_match_cache, &*context);
 
             let injector = espanso_inject::get_injector(InjectorCreationOptions {
@@ -210,7 +224,7 @@ pub fn initialize_and_spawn(
                 espanso_render::extension::shell::ShellExtension::new(&paths.config);
             let form_adapter = FormProviderAdapter::new(&modulo_form_ui);
             let form_extension = espanso_render::extension::form::FormExtension::new(&form_adapter);
-            let choice_adapter = ChoiceSelectorAdapter::new(&modulo_search_ui);
+            let choice_adapter = ChoiceSelectorAdapter::new(search_ui);
             let choice_extension =
                 espanso_render::extension::choice::ChoiceExtension::new(&choice_adapter);
             let renderer = espanso_render::create(vec![

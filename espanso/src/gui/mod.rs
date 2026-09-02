@@ -23,8 +23,26 @@ use anyhow::Result;
 
 pub mod modulo;
 
+#[cfg(target_os = "macos")]
+pub mod native;
+
 pub trait SearchUI {
     fn show(&self, items: &[SearchItem], hint: Option<&str>) -> Result<Option<String>>;
+}
+
+/// Config-derived options for the search UI, independent of any specific
+/// backend (modulo, native, …).
+pub trait SearchUIOptionProvider {
+    fn get_post_search_delay(&self) -> usize;
+}
+
+/// Lets the (in-process, macOS) search UI clear stale modifier state after it
+/// closes. While the search panel holds keyboard focus, espanso's global
+/// monitor can't see the user releasing the modifier that opened it (e.g. ALT
+/// from a hotkey), so the injector would otherwise wait ~3s for a release that
+/// already happened.
+pub trait ModifierStateResetter {
+    fn clear_modifier_state(&self);
 }
 
 #[derive(Debug)]

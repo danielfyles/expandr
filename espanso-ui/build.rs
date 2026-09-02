@@ -50,12 +50,16 @@ fn cc_config() {
     println!("cargo:rerun-if-changed=src/mac/native.h");
     println!("cargo:rerun-if-changed=src/mac/AppDelegate.mm");
     println!("cargo:rerun-if-changed=src/mac/AppDelegate.h");
+    println!("cargo:rerun-if-changed=src/mac/SearchPanel.mm");
+    println!("cargo:rerun-if-changed=src/mac/SearchPanel.h");
     cc::Build::new()
         .cpp(true)
         .include("src/mac/native.h")
         .include("src/mac/AppDelegate.h")
+        .include("src/mac/SearchPanel.h")
         .file("src/mac/native.mm")
         .file("src/mac/AppDelegate.mm")
+        .file("src/mac/SearchPanel.mm")
         .compile("espansoui");
     println!("cargo:rustc-link-lib=dylib=c++");
     println!("cargo:rustc-link-lib=static=espansoui");

@@ -19,6 +19,7 @@
 
 #include "native.h"
 #include "AppDelegate.h"
+#include "SearchPanel.h"
 #import <Foundation/Foundation.h>
 #include <IOKit/IOKitLib.h>
 #include <stdio.h>
@@ -89,5 +90,30 @@ void ui_show_context_menu(char *payload)
         [delegate popupMenu: nsPayload];
       }
     });
+  }
+}
+
+int32_t ui_show_search(char *hint, char *items_json)
+{
+  @autoreleasepool {
+    NSString *nsHint = hint ? [NSString stringWithUTF8String:hint] : @"";
+    NSString *nsJson = [NSString stringWithUTF8String:items_json];
+    NSData *data = [nsJson dataUsingEncoding:NSUTF8StringEncoding];
+    NSArray *items = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
+    if (![items isKindOfClass:[NSArray class]]) {
+      return -1;
+    }
+
+    // The search panel is modal and must run on the main thread; the caller is
+    // the engine thread, so hop over and block until the user chooses.
+    __block int32_t result = -1;
+    if ([NSThread isMainThread]) {
+      result = espanso_show_search_panel(nsHint, items);
+    } else {
+      dispatch_sync(dispatch_get_main_queue(), ^(void) {
+        result = espanso_show_search_panel(nsHint, items);
+      });
+    }
+    return result;
   }
 }

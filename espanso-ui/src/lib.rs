@@ -34,6 +34,9 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod mac;
 
+#[cfg(target_os = "macos")]
+pub use mac::{show_search, NativeSearchItem};
+
 pub trait UIRemote: Send {
     fn update_tray_icon(&self, icon: TrayIcon);
     fn show_notification(&self, message: &str);

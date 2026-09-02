@@ -218,6 +218,12 @@ impl crate::gui::modulo::search::ModuloSearchUIOptionProvider for ConfigManager<
     }
 }
 
+impl crate::gui::SearchUIOptionProvider for ConfigManager<'_> {
+    fn get_post_search_delay(&self) -> usize {
+        self.active().post_search_delay()
+    }
+}
+
 impl espanso_engine::process::AltCodeSynthEnabledProvider for ConfigManager<'_> {
     fn is_alt_code_synthesizer_enabled(&self) -> bool {
         self.active().emulate_alt_codes()

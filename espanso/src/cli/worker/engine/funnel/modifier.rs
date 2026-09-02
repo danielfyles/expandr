@@ -147,6 +147,12 @@ impl ModifierStatusProvider for ModifierStateStore {
     }
 }
 
+impl crate::gui::ModifierStateResetter for ModifierStateStore {
+    fn clear_modifier_state(&self) {
+        self.clear_state();
+    }
+}
+
 impl espanso_engine::process::ModifierStateProvider for ModifierStateStore {
     fn get_modifier_state(&self) -> espanso_engine::process::ModifierState {
         let mut state = self.state.lock().expect("unable to obtain modifier state");

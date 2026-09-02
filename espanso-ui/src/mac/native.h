@@ -73,4 +73,9 @@ extern "C" void ui_show_notification(char *message, double delay);
 // this manually would have been complex.
 extern "C" void ui_show_context_menu(char *payload);
 
+// Show the native (Spotlight-style) search panel modally and return the
+// original index of the chosen item, or -1 if cancelled. `items_json` is a JSON
+// array of { "label", "trigger"?, "terms"? } objects, in the original order.
+extern "C" int32_t ui_show_search(char *hint, char *items_json);
+
 #endif // ESPANSO_UI_H

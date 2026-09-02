@@ -60,6 +60,58 @@ extern "C" {
     pub fn ui_update_tray_icon(index: i32);
     pub fn ui_show_notification(message: *const c_char, delay: f64);
     pub fn ui_show_context_menu(payload: *const c_char);
+    pub fn ui_show_search(hint: *const c_char, items_json: *const c_char) -> i32;
+}
+
+/// An item shown in the native search panel.
+pub struct NativeSearchItem {
+    pub label: String,
+    pub trigger: Option<String>,
+    pub terms: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct RawSearchItem<'a> {
+    label: &'a str,
+    // Omit when absent so the native side never sees a JSON null (which would
+    // decode to NSNull and crash on string messaging).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trigger: Option<&'a str>,
+    terms: &'a [String],
+}
+
+/// Show the native (Spotlight-style) search panel modally and return the index
+/// of the chosen item within `items`, or `None` if the user cancelled.
+///
+/// Must be safe to call from a non-main thread: the native side hops to the
+/// main thread and blocks until the user chooses.
+pub fn show_search(hint: Option<&str>, items: &[NativeSearchItem]) -> Option<usize> {
+    let raw: Vec<RawSearchItem> = items
+        .iter()
+        .map(|i| RawSearchItem {
+            label: &i.label,
+            trigger: i.trigger.as_deref(),
+            terms: &i.terms,
+        })
+        .collect();
+
+    let items_json = match serde_json::to_string(&raw) {
+        Ok(json) => json,
+        Err(error) => {
+            error!("unable to serialize search items: {error}");
+            return None;
+        }
+    };
+
+    let hint_c = CString::new(hint.unwrap_or("")).ok()?;
+    let json_c = CString::new(items_json).ok()?;
+
+    let index = unsafe { ui_show_search(hint_c.as_ptr(), json_c.as_ptr()) };
+    if index < 0 {
+        None
+    } else {
+        usize::try_from(index).ok().filter(|i| *i < items.len())
+    }
 }
 
 pub struct MacUIOptions<'a> {
