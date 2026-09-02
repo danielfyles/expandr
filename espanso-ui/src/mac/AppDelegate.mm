@@ -47,41 +47,25 @@ void addSubMenu(NSMenu * parent, NSArray * items);
     return;
   }
 
-  NSImage *statusImage = nil;
+  // Monochrome Expandr panda template icons, one per state, provided by the
+  // Rust side. The index maps to the TrayIcon order: 0 = Normal, 1 = Disabled,
+  // 2 = SystemDisabled (e.g. macOS Secure Input). As template images, macOS
+  // tints them to match the menu bar in light/dark mode.
+  char * iconPath = options.icon_paths[iconIndex];
+  NSString *nsIconPath = [NSString stringWithUTF8String:iconPath];
+  NSImage *statusImage = [[NSImage alloc] initWithContentsOfFile:nsIconPath];
 
-  // Prefer crisp, theme-aware SF Symbols that change shape by state so the
-  // menu-bar status is legible at a glance. The icon index maps to the
-  // TrayIcon order built on the Rust side: 0 = Normal, 1 = Disabled,
-  // 2 = SystemDisabled (e.g. macOS Secure Input).
-  if (@available(macOS 11.0, *)) {
-    NSString *symbolName;
-    NSString *desc;
-    switch (iconIndex) {
-      case 1:
-        symbolName = @"pause.circle";
-        desc = @"espanso disabled";
-        break;
-      case 2:
-        symbolName = @"exclamationmark.triangle";
-        desc = @"espanso needs attention";
-        break;
-      default:
-        symbolName = @"keyboard";
-        desc = @"espanso active";
-        break;
+  if (statusImage != nil) {
+    // Fill (most of) the menu-bar height so the panda is as prominent as
+    // neighbouring items, preserving aspect ratio, and let the high-resolution
+    // source scale down crisply.
+    NSSize sz = [statusImage size];
+    if (sz.height > 0 && sz.width > 0) {
+      CGFloat side = [[NSStatusBar systemStatusBar] thickness] - 3.0;
+      statusImage.size = NSMakeSize(side * (sz.width / sz.height), side);
     }
-    statusImage = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:desc];
+    [statusImage setTemplate:YES];
   }
-
-  // Fall back to the bundled PNG icons on older systems or if the symbol is
-  // unavailable.
-  if (statusImage == nil) {
-    char * iconPath = options.icon_paths[iconIndex];
-    NSString *nsIconPath = [NSString stringWithUTF8String:iconPath];
-    statusImage = [[NSImage alloc] initWithContentsOfFile:nsIconPath];
-  }
-
-  [statusImage setTemplate:YES];
 
   [statusItem.button setImage:statusImage];
   [statusItem setHighlightMode:YES];

@@ -56,6 +56,10 @@ case "${1:-}" in
       codesign -s - --force "$BIN"
       echo "built + ad-hoc signed (run scripts/setup-dev-signing.sh for a stable grant): $BIN"
     fi
+    # The worker only extracts embedded icons if they're absent (extract_icon
+    # skips existing files), so clear the cached ones to pick up icon changes.
+    rm -f "$ESPANSO_RUNTIME_DIR"/*v2.png 2>/dev/null || true
+    echo "cleared extracted icon cache in runtime dir"
     ;;
   start)
     seed_config
