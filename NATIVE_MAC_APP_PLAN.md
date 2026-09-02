@@ -94,6 +94,17 @@ out a Swift↔Rust bridge, and only commit to a full Swift host if the direction
 
 ---
 
+## Confirmed direction (2026-09-01)
+
+The end goal is to **replace ALL of the existing wxWidgets/`modulo` UI with our own
+native UI** — not just wrap it. That includes a **new snippet-building UI** (espanso
+today has no GUI for authoring matches; config is hand-edited YAML), which is net-new
+product surface, not a like-for-like replacement. So the `modulo` build we now depend
+on is **interim scaffolding**: keep it working for releasable builds until each native
+replacement lands, then delete the vendored wxWidgets tree. This pushes the plan
+firmly toward **Path B** (native everything) over the long run, reached incrementally
+via Path A.
+
 ## Prioritized workstreams
 
 **1. Menu bar presence (native, build on what's there) — highest ROI, lowest risk.**
@@ -109,8 +120,9 @@ SwiftUI/AppKit replacement speaking the same `espanso modulo search` JSON contra
 so Rust is unchanged. Fuzzy match, dark mode, vibrancy, ⌘-styling.
 
 **3. Replace remaining windows** (forms → wizard → troubleshooting → welcome →
-textview), then **delete the vendored wxWidgets build** — also removes a large,
-slow, fragile part of the build.
+textview) with native UI, **plus a new native snippet-builder** (author/edit matches
+in a GUI instead of raw YAML — net-new surface), then **delete the vendored wxWidgets
+build** — also removes a large, slow, fragile part of the build.
 
 **4. Reliability & distribution (parallel — independent of UI).**
 - Automate **codesign + notarize + staple + hardened runtime + entitlements** in CI;
@@ -312,6 +324,21 @@ Files touched:
 
 Cross-platform: Windows/Linux menu JSON parsers ignore the new `checked`/`enabled`
 fields (graceful degradation; not yet tested on those platforms).
+
+### 2026-09-01 — App icon + DMG pipeline; full modulo build ✅
+
+- **Full-colour app icon**: `scripts/gen-app-icon.py` composes the panda into the
+  macOS squircle → `icon.icns` (all sizes via `iconutil`). User-approved.
+- **DMG pipeline**: `scripts/create_dmg.sh` (drag-to-Applications) +
+  `scripts/sign_and_notarize.sh` (Developer ID → notarize → staple) +
+  `scripts/entitlements.plist` (hardened runtime, non-sandboxed, apple-events).
+- **Full `modulo` build now works** (`brew install automake` done): produces a
+  genuinely runnable `Expandr.app` (launcher implemented, search/forms/wizard
+  present) → signed (hardened runtime + entitlements, dev cert stands in for
+  Developer ID; `Identifier=app.expandr`, satisfies its DR) → `Expandr-2.3.0.dmg`
+  (8.6 MB, mounts, panda icon). **Interim**: arm64-only + self-signed; a shippable
+  release still needs a universal binary + Developer ID notarization (Apple account).
+- Fast dev loop stays no-`modulo` (`espanso-dev.sh`); the full build is for bundling.
 
 **Dev loop now verified end-to-end:** granted Accessibility to the dev binary
 (`target/release/espanso`) and confirmed a real expansion — typing `:devtest`
