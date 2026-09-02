@@ -361,9 +361,19 @@ nav, light/dark, injects into the focused app. Works in the no-`modulo` dev buil
 - JSON across the FFI: JSON `null` → `NSNull` → crashes on string messaging;
   skip nulls in Rust AND guard `isKindOfClass:` in ObjC.
 
-**Still to polish (search):** visual refinement (field/placeholder sizing,
-row styling, empty state), click-outside-to-dismiss, and the panel currently has
-no result-count cap tuning. Functional path is solid.
+**Search visual polish done** (search glyph, concise placeholder, divider, trigger
+"pill" badges, translucent menu material with a mask-image-rounded blur, Auto Layout
+rows). Two more bridge-pattern learnings:
+- **Show the panel NON-modally + block the engine thread on a semaphore**, not a
+  nested `runModalForWindow:`. The modal loop's run-loop mode starves
+  `NSScrollView` smooth-scroll timers (scroll dumps in bursts).
+- **These `.mm` files are MRC** (manual retain/release — `AppDelegate.mm` uses
+  `retain`). Block/view-lifetime-heavy code (like `SearchPanel.mm`) should be
+  compiled under **ARC in a separate `cc::Build` with `-fobjc-arc`**; under MRC the
+  non-modal path segfaulted on unretained ivars (`allItems`/`filtered`).
+
+**Still optional (search):** accent-coloured selection (needs a custom row view to
+draw the accent while the field holds focus), click-outside-to-dismiss.
 
 **Dev loop now verified end-to-end:** granted Accessibility to the dev binary
 (`target/release/espanso`) and confirmed a real expansion — typing `:devtest`
