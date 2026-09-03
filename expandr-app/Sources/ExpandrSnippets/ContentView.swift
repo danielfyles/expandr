@@ -6,6 +6,14 @@ struct ContentView: View {
     @State private var selectedSnippetIDs: Set<Snippet.ID> = []
     @State private var dropTargetID: SnippetCategory.ID?
 
+    // New-category / rename / delete dialogs
+    @State private var showNewCategory = false
+    @State private var newCategoryName = ""
+    @State private var renamingCategoryID: SnippetCategory.ID?
+    @State private var renameText = ""
+    @FocusState private var renameFieldFocused: Bool
+    @State private var deletingCategoryID: SnippetCategory.ID?
+
     private var selectedCategory: SnippetCategory? {
         store.categories.first { $0.id == selectedCategoryID }
     }
@@ -13,6 +21,25 @@ struct ContentView: View {
     private var selectedSnippet: Snippet? {
         guard selectedSnippetIDs.count == 1, let id = selectedSnippetIDs.first else { return nil }
         return selectedCategory?.snippets.first { $0.id == id }
+    }
+
+    /// `isPresented` binding driven by the "which id am I acting on" state, so
+    /// dismissing the dialog clears the id.
+    private var deletingBinding: Binding<Bool> {
+        Binding(get: { deletingCategoryID != nil },
+                set: { if !$0 { deletingCategoryID = nil } })
+    }
+
+    private func beginRename(_ category: SnippetCategory) {
+        renameText = category.name
+        renamingCategoryID = category.id
+    }
+
+    /// Commit an in-place category rename (Enter or focus loss). Esc cancels by
+    /// clearing `renamingCategoryID` before this runs, so the guard no-ops.
+    private func commitRename() {
+        if let id = renamingCategoryID { store.renameCategory(id, to: renameText) }
+        renamingCategoryID = nil
     }
 
     /// Payload for dragging `id`: if it's part of a multi-selection, drag every
@@ -33,11 +60,35 @@ struct ContentView: View {
             List(selection: $selectedCategoryID) {
                 Section("Categories") {
                     ForEach(store.categories) { category in
-                        Label(category.name, systemImage: "folder")
-                            .badge(category.snippets.count)
+                        Group {
+                            if renamingCategoryID == category.id {
+                                // Opaque field background so the row's selection
+                                // highlight doesn't bleed through and wash out the text.
+                                TextField("Name", text: $renameText)
+                                    .textFieldStyle(.plain)
+                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .fill(Color(nsColor: .textBackgroundColor)))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .strokeBorder(Color.accentColor, lineWidth: 1.5))
+                                    .focused($renameFieldFocused)
+                                    .onAppear { DispatchQueue.main.async { renameFieldFocused = true } }
+                                    .onSubmit(commitRename)
+                                    .onExitCommand { renamingCategoryID = nil }
+                            } else {
+                                Label(category.name, systemImage: "folder")
+                                    .badge(category.snippets.count)
+                            }
+                        }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .tag(category.id)
+                            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                                beginRename(category)
+                            })
                             .dropDestination(for: String.self) { items, _ in
                                 var moved = false
                                 for item in items {
@@ -55,18 +106,32 @@ struct ContentView: View {
                             .listRowBackground(
                                 dropTargetID == category.id
                                     ? Color.accentColor.opacity(0.25) : Color.clear)
+                            .contextMenu {
+                                Button("Rename…") { beginRename(category) }
+                                Button("Delete…", role: .destructive) {
+                                    deletingCategoryID = category.id
+                                }
+                            }
                     }
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) {
-                // Placeholder for the ⚙︎ Preferences control (Phase 5).
-                HStack {
-                    Image(systemName: "gearshape").foregroundStyle(.secondary)
-                    Text("Preferences").foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Button {
+                        newCategoryName = ""
+                        showNewCategory = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("New category")
                     Spacer()
+                    // Placeholder for the ⚙︎ Preferences control (Phase 5).
+                    Image(systemName: "gearshape").foregroundStyle(.tertiary)
                 }
-                .padding(8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
             }
         } content: {
             // ---- Middle: snippets in the selected category ----
@@ -80,6 +145,21 @@ struct ContentView: View {
                 }
                 .navigationTitle(category.name)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300)
+                .safeAreaInset(edge: .top) {
+                    HStack {
+                        Button {
+                            if let id = store.addSnippet(toCategory: category.id) {
+                                selectedSnippetIDs = [id]
+                            }
+                        } label: {
+                            Label("New Snippet", systemImage: "plus")
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.bar)
+                }
             } else {
                 ContentUnavailableCompat("Select a category", systemImage: "folder")
             }
@@ -105,6 +185,34 @@ struct ContentView: View {
             }
         }
         .onChange(of: selectedCategoryID) { _ in selectedSnippetIDs = [] }
+        .alert("New Category", isPresented: $showNewCategory) {
+            TextField("Name", text: $newCategoryName)
+            Button("Create") {
+                if let id = store.addCategory(named: newCategoryName) {
+                    selectedCategoryID = id
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Creates a new match file in your espanso config.")
+        }
+        .onChange(of: renameFieldFocused) { focused in
+            // Blur commits the in-place rename (unless Esc already cancelled it).
+            if !focused && renamingCategoryID != nil { commitRename() }
+        }
+        .confirmationDialog(
+            "Delete this category?", isPresented: deletingBinding, titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let id = deletingCategoryID {
+                    if selectedCategoryID == id { selectedCategoryID = nil }
+                    store.deleteCategory(id)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The file and all its snippets will be moved to the Trash.")
+        }
         .overlay(alignment: .bottom) {
             if let error = store.loadError {
                 Text(error)
