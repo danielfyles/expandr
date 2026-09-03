@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
     @State private var deletingCategoryID: SnippetCategory.ID?
+    @State private var lastCategoryClickAt: Date?
 
     private var selectedCategory: SnippetCategory? {
         store.categories.first { $0.id == selectedCategoryID }
@@ -33,6 +34,20 @@ struct ContentView: View {
     private func beginRename(_ category: SnippetCategory) {
         renameText = category.name
         renamingCategoryID = category.id
+    }
+
+    /// Instant single-click selection; a second click on the already-selected
+    /// category (within ~½s) starts an in-place rename.
+    private func handleCategoryClick(_ category: SnippetCategory) {
+        let now = Date()
+        if selectedCategoryID == category.id,
+           let last = lastCategoryClickAt, now.timeIntervalSince(last) < 0.5 {
+            beginRename(category)
+            lastCategoryClickAt = nil
+        } else {
+            selectedCategoryID = category.id
+            lastCategoryClickAt = now
+        }
     }
 
     /// Commit an in-place category rename (Enter or focus loss). Esc cancels by
@@ -79,16 +94,19 @@ struct ContentView: View {
                                     .onSubmit(commitRename)
                                     .onExitCommand { renamingCategoryID = nil }
                             } else {
+                                // One count-1 tap fires instantly (no double-click
+                                // disambiguation lag): it selects, and a second click
+                                // on the already-selected row renames — Finder-style.
                                 Label(category.name, systemImage: "folder")
                                     .badge(category.snippets.count)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { handleCategoryClick(category) }
                             }
                         }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .tag(category.id)
-                            .simultaneousGesture(TapGesture(count: 2).onEnded {
-                                beginRename(category)
-                            })
                             .dropDestination(for: String.self) { items, _ in
                                 var moved = false
                                 for item in items {
