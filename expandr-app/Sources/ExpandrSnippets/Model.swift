@@ -11,6 +11,7 @@ struct Snippet: Identifiable, Hashable {
     var regex: String?
     var replace: String?        // plain-text replacement (the common case)
     var kind: EffectKind
+    var vars: [SnippetVar]      // {{name}} variables referenced by the body
 
     /// The original YAML mapping for this match, for lossless round-tripping.
     var raw: [String: Any]
@@ -34,8 +35,37 @@ struct Snippet: Identifiable, Hashable {
         return body.replacingOccurrences(of: "\n", with: " ")
     }
 
-    static func == (lhs: Snippet, rhs: Snippet) -> Bool { lhs.id == rhs.id }
+    // Compare the modelled fields (not just `id`) so SwiftUI's ForEach/List
+    // diffing re-renders a row after its trigger/label/body is edited. `raw`
+    // isn't Equatable, but the fields below cover everything the UI shows.
+    static func == (lhs: Snippet, rhs: Snippet) -> Bool {
+        lhs.id == rhs.id
+            && lhs.label == rhs.label
+            && lhs.triggers == rhs.triggers
+            && lhs.regex == rhs.regex
+            && lhs.replace == rhs.replace
+            && lhs.kind == rhs.kind
+            && lhs.vars.count == rhs.vars.count
+    }
+    // Hash stays id-only: equal snippets share an id (so equal hashes), and
+    // unequal snippets are allowed to collide.
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+/// An espanso variable — resolves a `{{name}}` reference in the body. `params`
+/// are type-specific; `raw` preserves fields we don't model (inject_vars,
+/// depends_on, unusual params) for round-tripping.
+struct SnippetVar: Identifiable {
+    let id = UUID()
+    var name: String
+    var type: String
+    var params: [String: Any]
+    var raw: [String: Any]
+
+    /// Variable types espanso supports, in a sensible order for the picker.
+    static let knownTypes = [
+        "date", "echo", "shell", "script", "clipboard", "random", "choice", "form", "match",
+    ]
 }
 
 /// One match file (`match/<name>.yml`) — maps to a category in the sidebar.

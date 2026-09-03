@@ -65,6 +65,56 @@ final class SnippetStore: ObservableObject {
         return SnippetCategory(url: url, snippets: snippets, rawTop: rawTop)
     }
 
+    // MARK: - Writing
+
+    /// Replace a snippet in its category and write the file back to disk.
+    func save(_ snippet: Snippet, inCategory categoryID: SnippetCategory.ID) {
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        if let si = categories[ci].snippets.firstIndex(where: { $0.id == snippet.id }) {
+            categories[ci].snippets[si] = snippet
+        }
+        writeFile(categories[ci])
+    }
+
+    /// Remove a snippet and write the file back.
+    func deleteSnippet(_ snippetID: Snippet.ID, inCategory categoryID: SnippetCategory.ID) {
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        categories[ci].snippets.removeAll { $0.id == snippetID }
+        writeFile(categories[ci])
+    }
+
+    private func writeFile(_ category: SnippetCategory) {
+        var top = category.rawTop
+        top["matches"] = category.snippets.map(Self.snippetToDict)
+        do {
+            // Emit block scalars for multi-line strings so replacements read well.
+            let yaml = try Yams.dump(object: top, width: -1)
+            try yaml.write(to: category.url, atomically: true, encoding: .utf8)
+            loadError = nil
+        } catch {
+            loadError = "Couldn't save \(category.name): \(error.localizedDescription)"
+        }
+    }
+
+    /// Overlay the edited fields onto the match's original mapping, so fields we
+    /// don't model (vars, word, force_mode, …) are preserved.
+    static func snippetToDict(_ s: Snippet) -> [String: Any] {
+        var d = s.raw
+        d.removeValue(forKey: "trigger")
+        d.removeValue(forKey: "triggers")
+        if s.triggers.count == 1 {
+            d["trigger"] = s.triggers[0]
+        } else if s.triggers.count > 1 {
+            d["triggers"] = s.triggers
+        }
+        if let label = s.label, !label.isEmpty { d["label"] = label } else { d.removeValue(forKey: "label") }
+        if let regex = s.regex, !regex.isEmpty { d["regex"] = regex }
+        if let replace = s.replace { d["replace"] = replace }
+        d.removeValue(forKey: "vars")
+        if !s.vars.isEmpty { d["vars"] = s.vars.map(varToDict) }
+        return d
+    }
+
     static func parseMatch(_ m: [String: Any]) -> Snippet {
         var triggers: [String] = []
         if let t = m["trigger"] as? String { triggers = [t] }
@@ -78,13 +128,35 @@ final class SnippetStore: ObservableObject {
         else if m["image_path"] != nil { kind = .image }
         else { kind = .other }
 
+        let vars = (m["vars"] as? [Any])?
+            .compactMap { $0 as? [String: Any] }
+            .map(parseVar) ?? []
+
         return Snippet(
             label: m["label"] as? String,
             triggers: triggers,
             regex: m["regex"] as? String,
             replace: m["replace"] as? String,
             kind: kind,
+            vars: vars,
             raw: m
         )
+    }
+
+    static func parseVar(_ v: [String: Any]) -> SnippetVar {
+        SnippetVar(
+            name: v["name"] as? String ?? "",
+            type: v["type"] as? String ?? "echo",
+            params: (v["params"] as? [String: Any]) ?? [:],
+            raw: v
+        )
+    }
+
+    static func varToDict(_ v: SnippetVar) -> [String: Any] {
+        var d = v.raw
+        d["name"] = v.name
+        d["type"] = v.type
+        if v.params.isEmpty { d.removeValue(forKey: "params") } else { d["params"] = v.params }
+        return d
     }
 }
