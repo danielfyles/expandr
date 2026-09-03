@@ -21,6 +21,7 @@
 #include "AppDelegate.h"
 #include "SearchPanel.h"
 #import <Foundation/Foundation.h>
+#import <CoreText/CoreText.h>
 #include <IOKit/IOKitLib.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,6 +91,24 @@ void ui_show_context_menu(char *payload)
         [delegate popupMenu: nsPayload];
       }
     });
+  }
+}
+
+void ui_register_font(const uint8_t *data, size_t len)
+{
+  @autoreleasepool {
+    CFDataRef cf_data = CFDataCreate(NULL, data, (CFIndex)len);
+    if (cf_data == NULL) {
+      return;
+    }
+    // Descriptor-from-data keeps variable-font axes (weight, optical size),
+    // unlike registering a single CGFont face.
+    CFArrayRef descriptors = CTFontManagerCreateFontDescriptorsFromData(cf_data);
+    if (descriptors != NULL) {
+      CTFontManagerRegisterFontDescriptors(descriptors, kCTFontManagerScopeProcess, true, NULL);
+      CFRelease(descriptors);
+    }
+    CFRelease(cf_data);
   }
 }
 

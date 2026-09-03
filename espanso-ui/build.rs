@@ -73,6 +73,7 @@ fn cc_config() {
     println!("cargo:rustc-link-lib=static=espansoui");
     println!("cargo:rustc-link-lib=static=espansoui_search");
     println!("cargo:rustc-link-lib=framework=Cocoa");
+    println!("cargo:rustc-link-lib=framework=CoreText");
     println!("cargo:rustc-link-lib=framework=IOKit");
 }
 

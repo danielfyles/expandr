@@ -21,6 +21,7 @@
 #define ESPANSO_UI_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 // Explicitly define this constant as we need to use it from the Rust side
 #define MAX_FILE_PATH 1024
@@ -77,5 +78,10 @@ extern "C" void ui_show_context_menu(char *payload);
 // original index of the chosen item, or -1 if cancelled. `items_json` is a JSON
 // array of { "label", "trigger"?, "terms"? } objects, in the original order.
 extern "C" int32_t ui_show_search(char *hint, char *items_json);
+
+// Register a font (TrueType/OpenType, including variable fonts) from memory for
+// the current process, so the native UI can use bundled fonts (Fraunces /
+// Newsreader) in both the dev binary and the packaged app.
+extern "C" void ui_register_font(const uint8_t *data, size_t len);
 
 #endif // ESPANSO_UI_H

@@ -61,6 +61,18 @@ extern "C" {
     pub fn ui_show_notification(message: *const c_char, delay: f64);
     pub fn ui_show_context_menu(payload: *const c_char);
     pub fn ui_show_search(hint: *const c_char, items_json: *const c_char) -> i32;
+    pub fn ui_register_font(data: *const u8, len: usize);
+}
+
+// Bundled brand fonts (SIL Open Font License), registered for the process at
+// startup so the native UI can use them in both the dev binary and the app.
+const FRAUNCES_FONT: &[u8] = include_bytes!("../../fonts/Fraunces.ttf");
+const NEWSREADER_FONT: &[u8] = include_bytes!("../../fonts/Newsreader.ttf");
+
+fn register_bundled_fonts() {
+    for font in [FRAUNCES_FONT, NEWSREADER_FONT] {
+        unsafe { ui_register_font(font.as_ptr(), font.len()) };
+    }
 }
 
 /// An item shown in the native search panel.
@@ -160,6 +172,9 @@ impl MacEventLoop {
 
 impl UIEventLoop for MacEventLoop {
     fn initialize(&mut self) -> Result<()> {
+        // Make the bundled brand fonts available to the native UI.
+        register_bundled_fonts();
+
         // Convert the icon paths to the raw representation
         let mut icon_paths: [[u8; MAX_FILE_PATH]; MAX_ICON_COUNT] =
             [[0; MAX_FILE_PATH]; MAX_ICON_COUNT];

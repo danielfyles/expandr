@@ -18,6 +18,37 @@
  */
 
 #import "SearchPanel.h"
+#import <CoreText/CoreText.h>
+
+// Variable-font axis tags.
+static const int kAxisWeight = 0x77676874;  // 'wght'
+static const int kAxisOptical = 0x6F70737A; // 'opsz'
+
+// Resolve a bundled variable font (registered at startup) at a given size and
+// weight, falling back to a system font if unavailable.
+static NSFont *espansoVariableFont(NSString *family, CGFloat size, NSDictionary *axes,
+                                   NSFont *fallback) {
+    NSFontDescriptor *desc = [NSFontDescriptor fontDescriptorWithFontAttributes:@{
+        NSFontFamilyAttribute : family,
+        (NSString *)kCTFontVariationAttribute : axes,
+    }];
+    NSFont *font = [NSFont fontWithDescriptor:desc size:size];
+    return font ?: fallback;
+}
+
+// Body text: Newsreader (serif), medium weight.
+static NSFont *espansoBodyFont(CGFloat size) {
+    return espansoVariableFont(@"Newsreader", size, @{@(kAxisWeight) : @(500)},
+                               [NSFont systemFontOfSize:size]);
+}
+
+// Headings: Fraunces (display serif), semibold at a display optical size.
+// (Ready for the windows we build next; no heading in the search panel yet.)
+__attribute__((unused)) static NSFont *espansoHeadingFont(CGFloat size) {
+    return espansoVariableFont(
+        @"Fraunces", size, @{@(kAxisWeight) : @(600), @(kAxisOptical) : @(72)},
+        [NSFont boldSystemFontOfSize:size]);
+}
 
 static const CGFloat kPanelWidth = 620.0;
 static const CGFloat kCornerRadius = 14.0;
@@ -51,6 +82,7 @@ static const NSInteger kMaxVisibleRows = 8;
     NSView *contentView;
     NSImageView *searchIcon;
     NSTextField *searchField;
+    NSTextField *placeholderLabel;
     NSBox *separator;
     NSTableView *tableView;
     NSScrollView *scrollView;
@@ -114,7 +146,9 @@ static const NSInteger kMaxVisibleRows = 8;
     window.contentView = bg;
     contentView = bg;
 
-    // Leading search glyph
+    // Leading search glyph + field, laid out with Auto Layout so the field uses
+    // its natural (intrinsic) height and is vertically centred — the same
+    // mechanism the result rows use, which centres cleanly and never clips.
     searchIcon = [[NSImageView alloc] init];
     if (@available(macOS 11.0, *)) {
         searchIcon.image = [NSImage imageWithSystemSymbolName:@"magnifyingglass"
@@ -122,23 +156,49 @@ static const NSInteger kMaxVisibleRows = 8;
     }
     searchIcon.contentTintColor = [NSColor secondaryLabelColor];
     searchIcon.imageScaling = NSImageScaleProportionallyUpOrDown;
+    searchIcon.translatesAutoresizingMaskIntoConstraints = NO;
     [bg addSubview:searchIcon];
 
-    // Search field
+    // Placeholder drawn as a separate, non-editable label (added first, so it
+    // sits behind the transparent field). NSTextField's built-in placeholder
+    // top-aligns and clips; a plain centred label doesn't (same as the rows).
+    placeholderLabel = [self plainLabel:20 color:[NSColor placeholderTextColor]];
+    placeholderLabel.font = espansoBodyFont(20);
+    placeholderLabel.stringValue =
+        (hint.length > 0 && hint.length <= 42) ? hint : @"Search snippets…";
+    placeholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [bg addSubview:placeholderLabel];
+
     searchField = [[NSTextField alloc] init];
-    searchField.font = [NSFont systemFontOfSize:20 weight:NSFontWeightRegular];
+    searchField.font = espansoBodyFont(20);
     searchField.bezeled = NO;
     searchField.bordered = NO;
     searchField.drawsBackground = NO;
     searchField.focusRingType = NSFocusRingTypeNone;
     searchField.delegate = self;
     searchField.textColor = [NSColor labelColor];
-    searchField.placeholderString =
-        (hint.length > 0 && hint.length <= 42) ? hint : @"Search snippets…";
+    searchField.usesSingleLineMode = YES;
     [(NSTextFieldCell *)searchField.cell setWraps:NO];
     [(NSTextFieldCell *)searchField.cell setScrollable:YES];
+    searchField.translatesAutoresizingMaskIntoConstraints = NO;
     [bg addSubview:searchField];
     window.initialFirstResponder = searchField;
+
+    // The field band sits in the top `kFieldHeight` of the panel; centre the
+    // icon, field, and placeholder on that band's centre line.
+    [NSLayoutConstraint activateConstraints:@[
+        [searchIcon.leadingAnchor constraintEqualToAnchor:bg.leadingAnchor constant:kInset],
+        [searchIcon.centerYAnchor constraintEqualToAnchor:bg.topAnchor constant:kFieldHeight / 2.0],
+        [searchIcon.widthAnchor constraintEqualToConstant:kSearchIconSize],
+        [searchIcon.heightAnchor constraintEqualToConstant:kSearchIconSize],
+        [searchField.leadingAnchor constraintEqualToAnchor:searchIcon.trailingAnchor constant:12],
+        [searchField.trailingAnchor constraintEqualToAnchor:bg.trailingAnchor constant:-kInset],
+        [searchField.centerYAnchor constraintEqualToAnchor:searchIcon.centerYAnchor],
+        // +2 to line up with where the field editor draws its text / caret;
+        // nudge down slightly for optical centring of the serif text.
+        [placeholderLabel.leadingAnchor constraintEqualToAnchor:searchField.leadingAnchor constant:2],
+        [placeholderLabel.centerYAnchor constraintEqualToAnchor:searchField.centerYAnchor constant:3],
+    ]];
 
     // Divider between field and list
     separator = [[NSBox alloc] init];
@@ -173,15 +233,10 @@ static const NSInteger kMaxVisibleRows = 8;
     [bg addSubview:scrollView];
 }
 
-// Lay out the chrome for a given total window height (list grows below field).
+// Lay out the chrome for a given total window height (list grows below the
+// field band; the icon + field themselves are positioned by Auto Layout).
 - (void)layoutChrome:(CGFloat)total {
     CGFloat fieldTop = total - kFieldHeight;
-    searchIcon.frame = NSMakeRect(kInset, fieldTop + (kFieldHeight - kSearchIconSize) / 2.0,
-                                  kSearchIconSize, kSearchIconSize);
-    CGFloat fieldX = kInset + kSearchIconSize + 12;
-    CGFloat fieldH = 26;
-    searchField.frame = NSMakeRect(fieldX, fieldTop + (kFieldHeight - fieldH) / 2.0,
-                                   kPanelWidth - fieldX - kInset, fieldH);
     BOOL hasRows = filtered.count > 0;
     separator.frame = NSMakeRect(kInset, fieldTop, kPanelWidth - 2 * kInset, 1);
     separator.hidden = !hasRows;
@@ -223,6 +278,7 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
 }
 
 - (void)filter:(NSString *)query {
+    placeholderLabel.hidden = (query.length > 0);
     [filtered removeAllObjects];
     for (NSUInteger i = 0; i < allItems.count; i++) {
         if (matchesQuery(allItems[i], query)) [filtered addObject:@(i)];
@@ -262,7 +318,8 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     const CGFloat sideInset = 12;
     NSView *cell = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, kRowHeight)];
 
-    NSTextField *label = [self plainLabel:15 color:[NSColor labelColor]];
+    NSTextField *label = [self plainLabel:16 color:[NSColor labelColor]];
+    label.font = espansoBodyFont(16);
     label.stringValue = stringValue(item[@"label"]) ?: @"";
     label.translatesAutoresizingMaskIntoConstraints = NO;
     [cell addSubview:label];
