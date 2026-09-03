@@ -3,13 +3,28 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var store = SnippetStore()
     @State private var selectedCategoryID: SnippetCategory.ID?
-    @State private var selectedSnippetID: Snippet.ID?
+    @State private var selectedSnippetIDs: Set<Snippet.ID> = []
+    @State private var dropTargetID: SnippetCategory.ID?
 
     private var selectedCategory: SnippetCategory? {
         store.categories.first { $0.id == selectedCategoryID }
     }
+    /// The editor targets a single selection; multi-select shows a summary instead.
     private var selectedSnippet: Snippet? {
-        selectedCategory?.snippets.first { $0.id == selectedSnippetID }
+        guard selectedSnippetIDs.count == 1, let id = selectedSnippetIDs.first else { return nil }
+        return selectedCategory?.snippets.first { $0.id == id }
+    }
+
+    /// Payload for dragging `id`: if it's part of a multi-selection, drag every
+    /// selected snippet (in list order), one id per line; otherwise just this one.
+    private func dragPayload(for id: Snippet.ID, in category: SnippetCategory) -> String {
+        if selectedSnippetIDs.contains(id) && selectedSnippetIDs.count > 1 {
+            return category.snippets
+                .filter { selectedSnippetIDs.contains($0.id) }
+                .map { $0.id.uuidString }
+                .joined(separator: "\n")
+        }
+        return id.uuidString
     }
 
     var body: some View {
@@ -20,7 +35,26 @@ struct ContentView: View {
                     ForEach(store.categories) { category in
                         Label(category.name, systemImage: "folder")
                             .badge(category.snippets.count)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                             .tag(category.id)
+                            .dropDestination(for: String.self) { items, _ in
+                                var moved = false
+                                for item in items {
+                                    for line in item.split(whereSeparator: \.isNewline) {
+                                        guard let sid = UUID(uuidString: String(line)) else { continue }
+                                        if store.moveSnippet(sid, toCategory: category.id) { moved = true }
+                                    }
+                                }
+                                if moved { selectedSnippetIDs = [] }
+                                return moved
+                            } isTargeted: { targeted in
+                                if targeted { dropTargetID = category.id }
+                                else if dropTargetID == category.id { dropTargetID = nil }
+                            }
+                            .listRowBackground(
+                                dropTargetID == category.id
+                                    ? Color.accentColor.opacity(0.25) : Color.clear)
                     }
                 }
             }
@@ -37,10 +71,11 @@ struct ContentView: View {
         } content: {
             // ---- Middle: snippets in the selected category ----
             if let category = selectedCategory {
-                List(selection: $selectedSnippetID) {
+                List(selection: $selectedSnippetIDs) {
                     ForEach(category.snippets) { snippet in
                         SnippetRow(primary: snippet.primaryText, preview: snippet.previewText)
                             .tag(snippet.id)
+                            .draggable(dragPayload(for: snippet.id, in: category))
                     }
                 }
                 .navigationTitle(category.name)
@@ -56,14 +91,20 @@ struct ContentView: View {
                     onSave: { store.save($0, inCategory: categoryID) },
                     onDelete: {
                         store.deleteSnippet(snippet.id, inCategory: categoryID)
-                        selectedSnippetID = nil
+                        selectedSnippetIDs = []
                     }
                 )
                 .id(snippet.id)  // reset editor state when the selection changes
+            } else if selectedSnippetIDs.count > 1 {
+                ContentUnavailableCompat(
+                    "\(selectedSnippetIDs.count) snippets selected",
+                    systemImage: "square.stack.3d.up",
+                    message: "Drag them onto a category in the sidebar to move them.")
             } else {
                 ContentUnavailableCompat("Select a snippet", systemImage: "text.cursor")
             }
         }
+        .onChange(of: selectedCategoryID) { _ in selectedSnippetIDs = [] }
         .overlay(alignment: .bottom) {
             if let error = store.loadError {
                 Text(error)
@@ -299,15 +340,24 @@ private extension View {
 struct ContentUnavailableCompat: View {
     let title: String
     let systemImage: String
-    init(_ title: String, systemImage: String) {
+    let message: String?
+    init(_ title: String, systemImage: String, message: String? = nil) {
         self.title = title
         self.systemImage = systemImage
+        self.message = message
     }
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: systemImage).font(.largeTitle).foregroundStyle(.tertiary)
             Text(title).foregroundStyle(.secondary)
+            if let message {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 }

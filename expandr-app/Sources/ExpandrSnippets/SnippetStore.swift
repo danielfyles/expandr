@@ -83,6 +83,26 @@ final class SnippetStore: ObservableObject {
         writeFile(categories[ci])
     }
 
+    /// Move a snippet to another category, rewriting both files. The source
+    /// category is found by id so a drag needs only the snippet's id. No-op if
+    /// the snippet is already in the target. Returns true if it moved.
+    @discardableResult
+    func moveSnippet(_ snippetID: Snippet.ID, toCategory targetID: SnippetCategory.ID) -> Bool {
+        guard let targetCI = categories.firstIndex(where: { $0.id == targetID }),
+              let srcCI = categories.firstIndex(where: {
+                  $0.snippets.contains { $0.id == snippetID }
+              }),
+              srcCI != targetCI,
+              let si = categories[srcCI].snippets.firstIndex(where: { $0.id == snippetID })
+        else { return false }
+
+        let snippet = categories[srcCI].snippets.remove(at: si)
+        categories[targetCI].snippets.append(snippet)
+        writeFile(categories[srcCI])
+        writeFile(categories[targetCI])
+        return true
+    }
+
     private func writeFile(_ category: SnippetCategory) {
         var top = category.rawTop
         top["matches"] = category.snippets.map(Self.snippetToDict)
