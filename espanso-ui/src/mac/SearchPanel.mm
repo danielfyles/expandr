@@ -63,11 +63,17 @@ static const NSInteger kMaxVisibleRows = 8;
 // though espanso is a menu-bar (accessory) app.
 // ---------------------------------------------------------------------------
 @interface EspansoSearchWindow : NSPanel
+@property (nonatomic, copy) void (^onCancel)(void);
 @end
 
 @implementation EspansoSearchWindow
 - (BOOL)canBecomeKeyWindow { return YES; }
 - (BOOL)canBecomeMainWindow { return NO; }
+// Esc anywhere in the panel (e.g. when the results table has focus after a
+// click) bubbles here if unhandled, so dismiss from here too.
+- (void)cancelOperation:(id)sender {
+    if (self.onCancel) self.onCancel();
+}
 @end
 
 // ---------------------------------------------------------------------------
@@ -134,6 +140,8 @@ static const NSInteger kMaxVisibleRows = 8;
     window.backgroundColor = [NSColor clearColor];
     window.hasShadow = YES;
     window.releasedWhenClosed = NO;
+    __weak EspansoSearchController *weakSelf = self;
+    ((EspansoSearchWindow *)window).onCancel = ^{ [weakSelf cancel]; };
 
     // Translucent, blurred background that adapts to light/dark automatically.
     // A rounded mask image rounds the *blur* itself (cornerRadius alone leaves a
