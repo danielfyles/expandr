@@ -88,7 +88,7 @@ void ui_show_context_menu(char *payload)
     dispatch_async(dispatch_get_main_queue(), ^(void) {
       @autoreleasepool {
         AppDelegate *delegate = (AppDelegate*)[[NSApplication sharedApplication] delegate];
-        [delegate popupMenu: nsPayload];
+        [delegate setStatusMenu: nsPayload];
       }
     });
   }

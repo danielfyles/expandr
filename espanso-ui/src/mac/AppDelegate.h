@@ -36,7 +36,7 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification;
 - (void)setIcon:(int32_t)iconIndex;
-- (void)popupMenu:(NSString *)payload;
+- (void)setStatusMenu:(NSString *)payload;
 - (void)showNotification:(NSString *)message withDelay:(double)delay;
 - (IBAction)statusIconClick:(id)sender;
 - (IBAction)contextMenuClick:(id)sender;

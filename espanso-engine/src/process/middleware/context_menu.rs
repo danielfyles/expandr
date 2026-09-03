@@ -40,6 +40,8 @@ const CONTEXT_ITEM_STATUS_HEADER: u32 = 9;
 pub struct ContextMenuMiddleware {
     is_enabled: RefCell<bool>,
     is_secure_input_enabled: RefCell<bool>,
+    // The menu is attached to the tray item natively, so push it once at startup.
+    menu_initialized: RefCell<bool>,
 }
 
 impl ContextMenuMiddleware {
@@ -47,7 +49,81 @@ impl ContextMenuMiddleware {
         Self {
             is_enabled: RefCell::new(true),
             is_secure_input_enabled: RefCell::new(false),
+            menu_initialized: RefCell::new(false),
         }
+    }
+
+    // Build the tray menu reflecting the current enabled / secure-input state.
+    fn build_menu_event(&self, source_id: u32) -> Event {
+        let is_enabled = *self.is_enabled.borrow();
+        let is_secure_input_enabled = *self.is_secure_input_enabled.borrow();
+
+        // Non-actionable header line reflecting espanso's current status.
+        let status_label = if is_secure_input_enabled {
+            "Expandr: secure input is blocking expansions"
+        } else if is_enabled {
+            "Expandr: active"
+        } else {
+            "Expandr: disabled"
+        };
+        let status_header = MenuItem::Simple(SimpleMenuItem {
+            id: CONTEXT_ITEM_STATUS_HEADER,
+            label: status_label.to_string(),
+            checked: false,
+            enabled: false,
+        });
+
+        // Single toggle carrying a native checkmark instead of swapping the label.
+        let toggle_enabled = MenuItem::Simple(SimpleMenuItem {
+            id: if is_enabled {
+                CONTEXT_ITEM_DISABLE
+            } else {
+                CONTEXT_ITEM_ENABLE
+            },
+            label: "Enabled".to_string(),
+            checked: is_enabled,
+            enabled: true,
+        });
+
+        let mut items = vec![
+            status_header,
+            MenuItem::Separator,
+            toggle_enabled,
+            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_OPEN_SEARCH, "Open search bar")),
+            MenuItem::Separator,
+            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_RELOAD, "Reload config")),
+            MenuItem::Simple(SimpleMenuItem::new(
+                CONTEXT_ITEM_OPEN_CONFIG_FOLDER,
+                "Open config folder",
+            )),
+            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_SHOW_LOGS, "Show logs")),
+            MenuItem::Separator,
+            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit Expandr")),
+        ];
+
+        if is_secure_input_enabled {
+            // Surface the secure-input remedies right below the header.
+            items.insert(
+                2,
+                MenuItem::Simple(SimpleMenuItem::new(
+                    CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
+                    "Why is Expandr not working?",
+                )),
+            );
+            items.insert(
+                3,
+                MenuItem::Simple(SimpleMenuItem::new(
+                    CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND,
+                    "Launch SecureInput auto-fix",
+                )),
+            );
+            items.insert(4, MenuItem::Separator);
+        }
+
+        Event::caused_by(
+            source_id,
+            EventType::ShowContextMenu(ShowContextMenuEvent { items }),
+        )
     }
 }
 
@@ -57,92 +133,16 @@ impl Middleware for ContextMenuMiddleware {
     }
 
     fn next(&self, event: Event, dispatch: &mut dyn FnMut(Event)) -> Event {
-        let mut is_enabled = self.is_enabled.borrow_mut();
-        let mut is_secure_input_enabled = self.is_secure_input_enabled.borrow_mut();
+        // Attach the menu to the tray item once, shortly after startup.
+        if !*self.menu_initialized.borrow() {
+            *self.menu_initialized.borrow_mut() = true;
+            dispatch(self.build_menu_event(event.source_id));
+        }
 
         match &event.etype {
-            EventType::TrayIconClicked => {
-                // TODO: fetch top matches for the active config to be added
-
-                // Non-actionable header line reflecting espanso's current status,
-                // so the state is legible at a glance (native menu convention).
-                let status_label = if *is_secure_input_enabled {
-                    "Expandr: secure input is blocking expansions"
-                } else if *is_enabled {
-                    "Expandr: active"
-                } else {
-                    "Expandr: disabled"
-                };
-                let status_header = MenuItem::Simple(SimpleMenuItem {
-                    id: CONTEXT_ITEM_STATUS_HEADER,
-                    label: status_label.to_string(),
-                    checked: false,
-                    enabled: false,
-                });
-
-                // Single toggle carrying a native checkmark instead of swapping
-                // the label between "Enable"/"Disable". Clicking it flips state.
-                let toggle_enabled = MenuItem::Simple(SimpleMenuItem {
-                    id: if *is_enabled {
-                        CONTEXT_ITEM_DISABLE
-                    } else {
-                        CONTEXT_ITEM_ENABLE
-                    },
-                    label: "Enabled".to_string(),
-                    checked: *is_enabled,
-                    enabled: true,
-                });
-
-                let mut items = vec![
-                    status_header,
-                    MenuItem::Separator,
-                    toggle_enabled,
-                    MenuItem::Simple(SimpleMenuItem::new(
-                        CONTEXT_ITEM_OPEN_SEARCH,
-                        "Open search bar",
-                    )),
-                    MenuItem::Separator,
-                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_RELOAD, "Reload config")),
-                    MenuItem::Simple(SimpleMenuItem::new(
-                        CONTEXT_ITEM_OPEN_CONFIG_FOLDER,
-                        "Open config folder",
-                    )),
-                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_SHOW_LOGS, "Show logs")),
-                    MenuItem::Separator,
-                    MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit Expandr")),
-                ];
-
-                if *is_secure_input_enabled {
-                    // Surface the secure-input remedies right below the header.
-                    items.insert(
-                        2,
-                        MenuItem::Simple(SimpleMenuItem::new(
-                            CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
-                            "Why is Expandr not working?",
-                        )),
-                    );
-                    items.insert(
-                        3,
-                        MenuItem::Simple(SimpleMenuItem::new(
-                            CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND,
-                            "Launch SecureInput auto-fix",
-                        )),
-                    );
-                    items.insert(4, MenuItem::Separator);
-                }
-
-                // TODO: my idea is to use a set of reserved u32 ids for built-in
-                // actions such as Exit, Open Editor etc
-                // then we need some u32 for the matches, so we need to create
-                // a mapping structure match_id <-> context-menu-id
-                Event::caused_by(
-                    event.source_id,
-                    EventType::ShowContextMenu(ShowContextMenuEvent {
-                        // TODO: add actual entries
-                        items,
-                    }),
-                )
-            }
+            // The menu is attached natively, so a click opens it directly; this
+            // path only runs as a fallback if the menu hasn't been pushed yet.
+            EventType::TrayIconClicked => self.build_menu_event(event.source_id),
             EventType::ContextMenuClicked(context_click_event) => {
                 match context_click_event.context_item_id {
                     CONTEXT_ITEM_EXIT => Event::caused_by(
@@ -199,19 +199,23 @@ impl Middleware for ContextMenuMiddleware {
                 }
             }
             EventType::Disabled => {
-                *is_enabled = false;
+                *self.is_enabled.borrow_mut() = false;
+                dispatch(self.build_menu_event(event.source_id));
                 event
             }
             EventType::Enabled => {
-                *is_enabled = true;
+                *self.is_enabled.borrow_mut() = true;
+                dispatch(self.build_menu_event(event.source_id));
                 event
             }
             EventType::SecureInputEnabled(_) => {
-                *is_secure_input_enabled = true;
+                *self.is_secure_input_enabled.borrow_mut() = true;
+                dispatch(self.build_menu_event(event.source_id));
                 event
             }
             EventType::SecureInputDisabled => {
-                *is_secure_input_enabled = false;
+                *self.is_secure_input_enabled.borrow_mut() = false;
+                dispatch(self.build_menu_event(event.source_id));
                 event
             }
             _ => event,

@@ -68,12 +68,16 @@ void addSubMenu(NSMenu * parent, NSArray * items);
   }
 
   [statusItem.button setImage:statusImage];
-  [statusItem setHighlightMode:YES];
+  // Don't invert the template image while the item is highlighted (which turned
+  // the panda white on the light click-highlight); keep it black.
+  [statusItem setHighlightMode:NO];
   [statusItem.button setAction:@selector(statusIconClick:)];
   [statusItem.button setTarget:self];
 }
 
 - (IBAction) statusIconClick: (id) sender {
+  // Unused once a menu is attached to the status item (macOS opens it on click),
+  // but kept as a harmless fallback if the menu hasn't been pushed yet.
   UIEvent event = {};
   event.event_type = UI_EVENT_TYPE_ICON_CLICK;
   if (event_callback && rust_instance) {
@@ -81,13 +85,17 @@ void addSubMenu(NSMenu * parent, NSArray * items);
   }
 }
 
-- (void) popupMenu: (NSString *) payload {
+// Attach the menu to the status item so macOS opens it on click and draws the
+// native highlight pill itself (no flicker; the template panda stays black).
+// The menu is pushed by the engine on startup and whenever its state changes.
+- (void) setStatusMenu: (NSString *) payload {
   NSError *jsonError;
   NSData *data = [payload dataUsingEncoding:NSUTF8StringEncoding];
   NSArray *jsonMenuItems = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:&jsonError];
   NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Expandr"];
+  menu.autoenablesItems = NO;
   addSubMenu(menu, jsonMenuItems);
-  [statusItem popUpStatusItemMenu: menu];
+  statusItem.menu = menu;
 }
 
 - (IBAction) contextMenuClick: (id) sender {
