@@ -86,6 +86,31 @@ struct SnippetVar: Identifiable {
         "date", "shell", "script", "clipboard", "random", "choice",
     ]
 
+    /// Common date formats offered in the date picker (espanso uses strftime
+    /// tokens). The first is the default. `Custom…` reveals a free-text field.
+    static let dateFormatPresets: [String] = [
+        "%a, %d %b %Y",     // Mon, 15 Jan 2024  (default)
+        "%Y-%m-%d",         // 2024-01-15
+        "%d/%m/%Y",         // 15/01/2024
+        "%d %B %Y",         // 15 January 2024
+        "%H:%M",            // 14:30
+        "%Y-%m-%d %H:%M",   // 2024-01-15 14:30
+    ]
+
+    /// All IANA timezone identifiers (what espanso's date `tz` param expects).
+    static let timezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
+
+    /// A live example of what `format` produces for the current date/time, via
+    /// C `strftime` (whose tokens match the chrono ones espanso uses).
+    static func dateExample(_ format: String) -> String {
+        var timestamp = time_t(Date().timeIntervalSince1970)
+        var parts = tm()
+        localtime_r(&timestamp, &parts)
+        var buffer = [Int8](repeating: 0, count: 256)
+        let count = strftime(&buffer, buffer.count, format, &parts)
+        return count > 0 ? String(cString: buffer) : format
+    }
+
     /// SF Symbol for a variable type, shown in the type picker.
     static func symbol(for type: String) -> String {
         switch type {

@@ -513,7 +513,7 @@ struct SnippetEditor: View {
     /// Variable rows on the slate-blue surface, with the add button.
     private var variablesSurface: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Reference these in the body as {{name}}.")
+            Text("Insert each variable in the Replacement text using its variable name inside curly brackets like this: {{example}}")
                 .font(.system(size: 11)).foregroundStyle(Color.brandSlate.opacity(0.8))
             ForEach($editor.vars) { $variable in
                 if variable.type != "form" {
@@ -558,7 +558,9 @@ struct SnippetEditor: View {
     }
 
     private func addVariable() {
-        editor.vars.append(SnippetVar(name: "var\(editor.vars.count + 1)", type: "date", params: [:], raw: [:]))
+        editor.vars.append(SnippetVar(
+            name: "var\(editor.vars.count + 1)", type: "date",
+            params: ["format": SnippetVar.dateFormatPresets[0]], raw: [:]))
     }
 
     /// The dashed cream placeholder shown when the snippet has no form yet.
@@ -614,9 +616,14 @@ struct VariableRow: View {
     let onInsert: () -> Void
     let onDelete: () -> Void
 
+    /// Whether the date format is a bespoke string (dropdown on "Custom…").
+    @State private var dateIsCustom = false
+    private static let customDateTag = "\u{1}custom"
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            HStack(alignment: .bottom, spacing: 8) {
+                labeled("Variable type") {
                 Picker("", selection: Binding(
                     get: { variable.type },
                     set: { newType in
@@ -625,7 +632,12 @@ struct VariableRow: View {
                         // invisibly or get written to the file.
                         guard newType != variable.type else { return }
                         variable.type = newType
-                        variable.params = [:]
+                        if newType == "date" {
+                            variable.params = ["format": SnippetVar.dateFormatPresets[0]]
+                            dateIsCustom = false
+                        } else {
+                            variable.params = [:]
+                        }
                     })
                 ) {
                     // Keep the current type selectable even if it's not offered
@@ -639,9 +651,12 @@ struct VariableRow: View {
                 }
                 .labelsHidden()
                 .frame(width: 130)
-                TextField("name", text: $variable.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
+                }
+                labeled("Variable name") {
+                    TextField("name", text: $variable.name)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 150)
+                }
                 Spacer()
                 Button(action: onInsert) { Image(systemName: "arrow.down.square") }
                     .buttonStyle(.borderless)
@@ -654,13 +669,82 @@ struct VariableRow: View {
         .padding(8)
         .background(Color.brandCard, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.brandSlate.opacity(0.15)))
+        .onAppear {
+            // A date whose format isn't one of the presets starts in Custom mode.
+            if variable.type == "date" {
+                let current = variable.params["format"] as? String ?? ""
+                dateIsCustom = !SnippetVar.dateFormatPresets.contains(current)
+            }
+        }
+    }
+
+    /// Dropdown selection ↔ the stored `format` string; "Custom…" reveals a field.
+    private var dateFormatSelection: Binding<String> {
+        Binding(
+            get: {
+                if dateIsCustom { return Self.customDateTag }
+                let current = variable.params["format"] as? String ?? ""
+                return SnippetVar.dateFormatPresets.contains(current) ? current : Self.customDateTag
+            },
+            set: { newValue in
+                if newValue == Self.customDateTag {
+                    dateIsCustom = true
+                } else {
+                    dateIsCustom = false
+                    variable.params["format"] = newValue
+                }
+            })
+    }
+
+    /// Timezone dropdown ↔ the stored `tz` param ("" = system default, unset).
+    private var tzSelection: Binding<String> {
+        Binding(
+            get: { variable.params["tz"] as? String ?? "" },
+            set: { newValue in
+                if newValue.isEmpty { variable.params.removeValue(forKey: "tz") }
+                else { variable.params["tz"] = newValue }
+            })
     }
 
     @ViewBuilder private var paramFields: some View {
         switch variable.type {
         case "date":
-            labeled("Format") { TextField("%Y-%m-%d", text: strParam("format")).textFieldStyle(.roundedBorder) }
-            labeled("Timezone (optional)") { TextField("e.g. Europe/London", text: strParam("tz")).textFieldStyle(.roundedBorder) }
+            labeled("Format") {
+                Picker("", selection: dateFormatSelection) {
+                    ForEach(SnippetVar.dateFormatPresets, id: \.self) { format in
+                        Text(SnippetVar.dateExample(format)).tag(format)
+                    }
+                    Text("Custom…").tag(Self.customDateTag)
+                }
+                .labelsHidden()
+            }
+            if dateIsCustom {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text("Custom date/time format (uses strftime syntax)").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Link(destination: URL(string: "https://www.strfti.me/")!) {
+                            HStack(spacing: 3) {
+                                Text("www.strfti.me")
+                                Image(systemName: "arrow.up.right.square")
+                            }
+                            .font(.system(size: 11))
+                        }
+                        .help("strftime format reference (strfti.me)")
+                    }
+                    TextField("%Y-%m-%d", text: strParam("format")).textFieldStyle(.roundedBorder)
+                }
+            }
+            labeled("Timezone") {
+                let current = variable.params["tz"] as? String ?? ""
+                Picker("", selection: tzSelection) {
+                    Text("System default").tag("")
+                    if !current.isEmpty && !SnippetVar.timezones.contains(current) {
+                        Text(current).tag(current)  // keep an unknown value selectable
+                    }
+                    ForEach(SnippetVar.timezones, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden()
+            }
         case "echo":
             labeled("Text") { TextField("text to insert", text: strParam("echo")).textFieldStyle(.roundedBorder) }
         case "shell":
