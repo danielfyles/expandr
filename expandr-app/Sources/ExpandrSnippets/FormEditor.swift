@@ -10,7 +10,7 @@ struct FormEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("These appear as a form when the trigger is typed.")
-                .font(BrandFont.body(11)).foregroundStyle(Color.brandMuted)
+                .font(.system(size: 11)).foregroundStyle(Color.brandMuted)
 
             ForEach($fields) { $field in
                 FormFieldRow(
@@ -96,7 +96,7 @@ struct FormFieldRow: View {
 
     @ViewBuilder private func labeled(_ title: String, width: CGFloat, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(BrandFont.body(10)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
             content()
         }
         .frame(width: width)
@@ -104,7 +104,7 @@ struct FormFieldRow: View {
 
     @ViewBuilder private func labeledBlock(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(BrandFont.body(10)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
             content()
         }
     }
