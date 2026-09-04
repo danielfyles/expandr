@@ -100,7 +100,7 @@ struct SubmittingTextEditor: NSViewRepresentable {
         textView.onFocus = onFocus
         textView.delegate = context.coordinator
         textView.isRichText = false
-        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.font = BrandFont.bodyNSFont(14)
         textView.textColor = NSColor(Color.brandInk)
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 6, height: 8)

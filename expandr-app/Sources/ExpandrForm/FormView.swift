@@ -141,7 +141,7 @@ struct FormView: View {
     @ViewBuilder private func fieldBlock(_ entry: FieldEntry) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(entry.label)
-                .font(.system(size: 12.5, weight: .semibold, design: .serif))
+                .font(BrandFont.heading(13, weight: 600))
                 .foregroundStyle(Color.brandAccentDeep)
             control(entry.name)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,6 +160,8 @@ struct FormView: View {
             // ring when current.
             TextField("", text: binding)
                 .textFieldStyle(.plain)
+                .font(BrandFont.body(14))
+                .foregroundStyle(Color.brandInk)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 7)
                 .background(RoundedRectangle(cornerRadius: 7).fill(Color.brandCard))
