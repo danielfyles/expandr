@@ -11,6 +11,7 @@ import SwiftUI
 struct FormEditor: View {
     @Binding var fields: [FormFieldSpec]
     let varName: String
+    var replaceText: String = ""   // to flag fields not yet referenced in the body
     let onInsertReference: (String) -> Void
     let onPreview: () -> Void
 
@@ -33,6 +34,8 @@ struct FormEditor: View {
                 FormFieldRow(
                     field: $field,
                     isDragging: draggingID == id,
+                    isReferenced: !field.name.isEmpty
+                        && replaceText.contains("{{\(varName).\(field.name)}}"),
                     onInsert: { onInsertReference("{{\(varName).\(field.name)}}") },
                     onDelete: { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         fields.removeAll { $0.id == id } } },
@@ -162,6 +165,7 @@ private struct RowHeightKey: PreferenceKey {
 struct FormFieldRow: View, Equatable {
     @Binding var field: FormFieldSpec
     var isDragging: Bool = false
+    var isReferenced: Bool = true
     let onInsert: () -> Void
     let onDelete: () -> Void
     var onDragChanged: (CGFloat) -> Void = { _ in }
@@ -169,6 +173,7 @@ struct FormFieldRow: View, Equatable {
 
     static func == (lhs: FormFieldRow, rhs: FormFieldRow) -> Bool {
         lhs.field == rhs.field && lhs.isDragging == rhs.isDragging
+            && lhs.isReferenced == rhs.isReferenced
     }
 
     var body: some View {
@@ -187,7 +192,10 @@ struct FormFieldRow: View, Equatable {
                     .labelsHidden()
                 }
                 Spacer()
-                Button(action: onInsert) { Image(systemName: "arrow.down.square") }
+                Button(action: onInsert) {
+                    Image(systemName: "arrow.down.square")
+                        .foregroundStyle(isReferenced ? Color.accentColor : Color.red)
+                }
                     .buttonStyle(.borderless)
                     .help("Insert {{…\(field.name)}} into the body")
                 dragHandle

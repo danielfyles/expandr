@@ -427,6 +427,7 @@ struct SnippetEditor: View {
     let onSave: () -> Void
     let onDelete: () -> Void
     @State private var previewError: String?
+    @StateObject private var insertionTarget = TextInsertionTarget()
 
     var body: some View {
         ScrollView {
@@ -435,7 +436,9 @@ struct SnippetEditor: View {
                     TextField("Optional description", text: $editor.label)
                         .textFieldStyle(.roundedBorder)
                 }
-                section("Triggers") {
+                let triggerCount = editor.triggersText.split(whereSeparator: \.isNewline)
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+                section(triggerCount > 1 ? "Triggers" : "Trigger") {
                     Text("One per line").font(.system(size: 11)).foregroundStyle(.secondary)
                     GrowingTextEditor(text: $editor.triggersText, minHeight: 54)
                         .editorChrome()
@@ -445,7 +448,8 @@ struct SnippetEditor: View {
                         FormEditor(
                             fields: $editor.formFields,
                             varName: editor.formVarName,
-                            onInsertReference: { editor.replace += $0 },
+                            replaceText: editor.replace,
+                            onInsertReference: { insertionTarget.insert($0) },
                             onPreview: runPreview)
                             .padding(14)
                             .background(FormSurfaceBackground())
@@ -470,7 +474,8 @@ struct SnippetEditor: View {
                 // fields and variables into the final output.
                 if editor.replaceEditable {
                     section("Replacement") {
-                        GrowingTextEditor(text: $editor.replace, minHeight: 120)
+                        GrowingTextEditor(text: $editor.replace, minHeight: 120,
+                                          insertionTarget: insertionTarget)
                             .padding(6)
                             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12)
@@ -519,7 +524,9 @@ struct SnippetEditor: View {
                 if variable.type != "form" {
                     VariableRow(
                         variable: $variable,
-                        onInsert: { editor.replace += "{{\(variable.name)}}" },
+                        isReferenced: !variable.name.isEmpty
+                            && editor.replace.contains("{{\(variable.name)}}"),
+                        onInsert: { insertionTarget.insert("{{\(variable.name)}}") },
                         onDelete: { editor.vars.removeAll { $0.id == variable.id } })
                 }
             }
@@ -613,6 +620,7 @@ struct SnippetEditor: View {
 /// One variable: name + type picker + type-aware parameter fields.
 struct VariableRow: View {
     @Binding var variable: SnippetVar
+    var isReferenced: Bool = true   // false → the insert icon reddens as a cue
     let onInsert: () -> Void
     let onDelete: () -> Void
 
@@ -658,7 +666,10 @@ struct VariableRow: View {
                         .frame(width: 150)
                 }
                 Spacer()
-                Button(action: onInsert) { Image(systemName: "arrow.down.square") }
+                Button(action: onInsert) {
+                    Image(systemName: "arrow.down.square")
+                        .foregroundStyle(isReferenced ? Color.accentColor : Color.red)
+                }
                     .buttonStyle(.borderless)
                     .help("Insert {{\(variable.name)}} into the body")
                 Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }

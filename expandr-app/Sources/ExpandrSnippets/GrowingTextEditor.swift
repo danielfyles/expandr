@@ -1,6 +1,20 @@
 import SwiftUI
 import AppKit
 
+/// Holds a reference to a text view so buttons elsewhere can insert text at its
+/// caret (used for dropping {{variable}} references into the Replacement field).
+final class TextInsertionTarget: ObservableObject {
+    weak var textView: NSTextView?
+
+    /// Insert `string` at the current caret/selection, focusing the field so the
+    /// change is visible; falls back to nothing if no field is registered.
+    func insert(_ string: String) {
+        guard let textView else { return }
+        textView.window?.makeFirstResponder(textView)
+        textView.insertText(string, replacementRange: textView.selectedRange())
+    }
+}
+
 /// A plain-text editor that grows to fit its content (no internal scrolling),
 /// down to a minimum height. SwiftUI's `TextEditor` can't auto-size on macOS 13,
 /// so this wraps a non-scrolling `NSTextView` that reports its content height as
@@ -9,6 +23,7 @@ struct GrowingTextEditor: NSViewRepresentable {
     @Binding var text: String
     var minHeight: CGFloat = 54
     var placeholder: String = ""
+    var insertionTarget: TextInsertionTarget? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -16,6 +31,7 @@ struct GrowingTextEditor: NSViewRepresentable {
         let view = GrowingNSTextView()
         view.minHeightConstant = minHeight
         view.placeholder = placeholder
+        insertionTarget?.textView = view
         view.delegate = context.coordinator
         view.isRichText = false
         view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -33,6 +49,7 @@ struct GrowingTextEditor: NSViewRepresentable {
     func updateNSView(_ view: GrowingNSTextView, context: Context) {
         view.minHeightConstant = minHeight
         view.placeholder = placeholder
+        insertionTarget?.textView = view
         if view.string != text { view.string = text }
         view.invalidateIntrinsicContentSize()
         view.needsDisplay = true  // refresh the placeholder as the text empties/fills
