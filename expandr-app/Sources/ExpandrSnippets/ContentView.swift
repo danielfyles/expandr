@@ -164,7 +164,7 @@ struct ContentView: View {
             if let category = selectedCategory {
                 List(selection: $selectedSnippetIDs) {
                     ForEach(category.snippets) { snippet in
-                        SnippetRow(primary: snippet.primaryText, preview: snippet.previewText)
+                        SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
                             .tag(snippet.id)
                             .draggable(dragPayload(for: snippet.id, in: category))
                     }
@@ -259,7 +259,7 @@ struct SnippetRow: View {
     let preview: String
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(primary).font(BrandFont.body(15, weight: 500))
+            Text(primary).font(BrandFont.body(15, weight: 500)).lineLimit(1)
             if !preview.isEmpty {
                 Text(preview)
                     .font(BrandFont.body(12))
@@ -280,6 +280,9 @@ struct SnippetEditor: View {
     @State private var triggersText: String
     @State private var replace: String
     @State private var vars: [SnippetVar]
+    @State private var formFields: [FormFieldSpec]
+    @State private var formVarName: String
+    @State private var previewError: String?
 
     /// Only plain `replace` snippets are body-editable for now; markdown / html /
     /// form / image bodies are preserved untouched.
@@ -295,6 +298,14 @@ struct SnippetEditor: View {
         _triggersText = State(initialValue: snippet.triggers.joined(separator: "\n"))
         _replace = State(initialValue: snippet.replace ?? "")
         _vars = State(initialValue: snippet.vars)
+
+        if let formVar = FormBuilder.formVar(in: snippet) {
+            _formFields = State(initialValue: FormBuilder.parse(formVar))
+            _formVarName = State(initialValue: formVar.name.isEmpty ? "form1" : formVar.name)
+        } else {
+            _formFields = State(initialValue: [])
+            _formVarName = State(initialValue: "form1")
+        }
     }
 
     var body: some View {
@@ -311,37 +322,49 @@ struct SnippetEditor: View {
                         .frame(minHeight: 54)
                         .editorChrome()
                 }
+                section("Form") {
+                    if !formFields.isEmpty {
+                        FormEditor(
+                            fields: $formFields,
+                            varName: formVarName,
+                            onInsertReference: { replace += $0 },
+                            onPreview: runPreview)
+                            .padding(14)
+                            .background(FormSurfaceBackground())
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(Color.brandAccent.opacity(0.18), lineWidth: 2.5))
+                    } else {
+                        formPlaceholder
+                    }
+                }
+
+                section("Variables") {
+                    // Form vars are managed by the Form designer above.
+                    if vars.contains(where: { $0.type != "form" }) {
+                        variablesSurface
+                    } else {
+                        variablePlaceholder
+                    }
+                }
+
+                // Replacement comes last: it stitches together the trigger, form
+                // fields and variables into the final output.
                 if replaceEditable {
                     section("Replacement") {
                         TextEditor(text: $replace)
                             .font(.body.monospaced())
                             .frame(minHeight: 160)
-                            .editorChrome()
+                            .padding(6)
+                            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.brandSage, lineWidth: 2.5))
                     }
                 } else {
                     section("Replacement (\(snippet.kind.rawValue))") {
                         Text("Editing \(snippet.kind.rawValue) snippets isn't supported yet — it's preserved as-is.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
-                }
-
-                section("Variables") {
-                    Text("Reference these in the body as {{name}}.")
-                        .font(BrandFont.body(11)).foregroundStyle(.secondary)
-                    ForEach($vars) { $variable in
-                        VariableRow(
-                            variable: $variable,
-                            onInsert: { replace += "{{\(variable.name)}}" },
-                            onDelete: { vars.removeAll { $0.id == variable.id } }
-                        )
-                    }
-                    Button {
-                        vars.append(SnippetVar(name: "var\(vars.count + 1)", type: "echo",
-                                               params: [:], raw: [:]))
-                    } label: {
-                        Label("Add variable", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderless)
                 }
             }
             .padding(20)
@@ -359,6 +382,104 @@ struct SnippetEditor: View {
                 .keyboardShortcut("s", modifiers: .command)
             }
         }
+        .alert("Preview", isPresented: Binding(
+            get: { previewError != nil },
+            set: { if !$0 { previewError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(previewError ?? "")
+        }
+    }
+
+    /// Variable rows on the slate-blue surface, with the add button.
+    private var variablesSurface: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Reference these in the body as {{name}}.")
+                .font(BrandFont.body(11)).foregroundStyle(Color.brandSlate.opacity(0.8))
+            ForEach($vars) { $variable in
+                if variable.type != "form" {
+                    VariableRow(
+                        variable: $variable,
+                        onInsert: { replace += "{{\(variable.name)}}" },
+                        onDelete: { vars.removeAll { $0.id == variable.id } })
+                }
+            }
+            Button(action: addVariable) { Label("Add variable", systemImage: "plus") }
+                .buttonStyle(.borderless)
+        }
+        .padding(14)
+        .background(VariableSurfaceBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.brandSlate.opacity(0.18), lineWidth: 2.5))
+    }
+
+    /// The dashed slate-blue placeholder shown when there are no variables yet.
+    private var variablePlaceholder: some View {
+        Button(action: addVariable) {
+            VStack(spacing: 8) {
+                Image(systemName: "curlybraces")
+                    .font(.title2).foregroundStyle(Color.brandSlate)
+                Text("Add variable")
+                    .font(BrandFont.heading(15, weight: 600)).foregroundStyle(Color.brandSlate)
+                Text("Insert dynamic values — dates, shell output, the clipboard and more")
+                    .font(BrandFont.body(13)).foregroundStyle(Color.brandSlate.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(VariableSurfaceBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12).strokeBorder(
+                Color.brandSlate.opacity(0.4),
+                style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])))
+    }
+
+    private func addVariable() {
+        vars.append(SnippetVar(name: "var\(vars.count + 1)", type: "echo", params: [:], raw: [:]))
+    }
+
+    /// The dashed cream placeholder shown when the snippet has no form yet.
+    private var formPlaceholder: some View {
+        Button(action: addForm) {
+            VStack(spacing: 8) {
+                Image(systemName: "rectangle.and.pencil.and.ellipsis")
+                    .font(.title2).foregroundStyle(Color.brandAccentDeep)
+                Text("Add a form")
+                    .font(BrandFont.heading(15, weight: 600)).foregroundStyle(Color.brandAccentDeep)
+                Text("Show a fill-in form when this trigger is typed")
+                    .font(BrandFont.body(13)).foregroundStyle(Color.brandMuted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(FormSurfaceBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12).strokeBorder(
+                Color.brandAccent.opacity(0.5),
+                style: StrokeStyle(lineWidth: 2.5, dash: [6, 4])))
+    }
+
+    private func addForm() {
+        if formFields.isEmpty {
+            formFields = [FormFieldSpec(
+                label: "Name", name: "name", kind: .text, defaultValue: "", values: [])]
+        }
+    }
+
+    private func runPreview() {
+        do {
+            try FormPreview.show(title: snippet.primaryText, fields: formFields)
+        } catch {
+            previewError = error.localizedDescription
+        }
     }
 
     private func save() {
@@ -369,7 +490,18 @@ struct SnippetEditor: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         if replaceEditable { updated.replace = replace }
-        updated.vars = vars
+
+        // Rebuild vars: keep non-form vars, re-serialise the form from the designer.
+        var newVars = vars.filter { $0.type != "form" }
+        if !formFields.isEmpty {
+            var formVar = FormBuilder.formVar(in: snippet)
+                ?? SnippetVar(name: formVarName, type: "form", params: [:], raw: [:])
+            formVar.name = formVarName
+            formVar.type = "form"
+            formVar.params = FormBuilder.params(from: formFields)
+            newVars.insert(formVar, at: 0)
+        }
+        updated.vars = newVars
         onSave(updated)
     }
 
@@ -408,7 +540,8 @@ struct VariableRow: View {
             paramFields
         }
         .padding(8)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.brandCard, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.brandSlate.opacity(0.15)))
     }
 
     @ViewBuilder private var paramFields: some View {
@@ -462,7 +595,7 @@ struct VariableRow: View {
     }
 }
 
-private extension View {
+extension View {
     func editorChrome() -> some View {
         padding(6)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))

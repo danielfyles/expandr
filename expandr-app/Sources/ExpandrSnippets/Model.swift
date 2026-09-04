@@ -35,6 +35,22 @@ struct Snippet: Identifiable, Hashable {
         return body.replacingOccurrences(of: "\n", with: " ")
     }
 
+    /// First line in the list: the label if set, otherwise the replacement body.
+    var listTitle: String {
+        if let label, !label.isEmpty { return label }
+        let body = replace ?? (raw["markdown"] as? String) ?? (raw["html"] as? String)
+            ?? (raw["form"] as? String) ?? ""
+        let oneLine = body.replacingOccurrences(of: "\n", with: " ")
+        if !oneLine.isEmpty { return oneLine }
+        return triggers.first ?? regex ?? "(untitled)"
+    }
+
+    /// Second line in the list: the expansion trigger(s).
+    var listSubtitle: String {
+        if !triggers.isEmpty { return triggers.joined(separator: ", ") }
+        return regex ?? ""
+    }
+
     // Compare the modelled fields (not just `id`) so SwiftUI's ForEach/List
     // diffing re-renders a row after its trigger/label/body is edited. `raw`
     // isn't Equatable, but the fields below cover everything the UI shows.

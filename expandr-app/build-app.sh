@@ -60,10 +60,16 @@ else
 fi
 echo "built: $APP"
 
+# Also build the form renderer as a sibling helper (build/ExpandrForm.app) so the
+# in-app Form Preview can find it next to this app.
+"$HERE/build-form-app.sh" >/dev/null && echo "built form renderer sibling: $HERE/build/ExpandrForm.app"
+
 if [ "${1:-}" = "run" ]; then
   echo "launching against ~/espanso-dev/config ..."
   # Launch the bundled executable directly (not via `open`) so ESPANSO_CONFIG_DIR
   # reaches the app — LaunchServices does not inherit the shell environment.
-  ESPANSO_CONFIG_DIR="$HOME/espanso-dev/config" "$APP/Contents/MacOS/$EXE_NAME" &
+  ESPANSO_CONFIG_DIR="$HOME/espanso-dev/config" \
+    EXPANDR_FORM_BIN="$HERE/build/ExpandrForm.app/Contents/MacOS/ExpandrForm" \
+    "$APP/Contents/MacOS/$EXE_NAME" &
   echo "launched (pid $!)"
 fi

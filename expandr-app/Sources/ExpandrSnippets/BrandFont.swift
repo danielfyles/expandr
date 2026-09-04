@@ -2,6 +2,45 @@ import SwiftUI
 import CoreText
 import AppKit
 
+/// Expandr brand palette, sampled from the expandr.app holding page.
+extension Color {
+    static let brandBG         = Color(red: 250/255, green: 243/255, blue: 230/255) // #FAF3E6
+    static let brandCard       = Color(red: 255/255, green: 252/255, blue: 246/255) // #FFFCF6
+    static let brandInk        = Color(red: 46/255,  green: 33/255,  blue: 24/255)  // #2E2118
+    static let brandMuted      = Color(red: 107/255, green: 87/255,  blue: 72/255)  // #6B5748
+    static let brandAccent     = Color(red: 201/255, green: 112/255, blue: 47/255)  // #C9702F
+    static let brandAccentDeep = Color(red: 138/255, green: 63/255,  blue: 22/255)  // #8A3F16
+    // Variable surface (a cool slate blue), to distinguish it from forms.
+    static let brandBlue       = Color(red: 190/255, green: 198/255, blue: 214/255) // #BEC6D6
+    static let brandSlate      = Color(red: 58/255,  green: 70/255,  blue: 88/255)  // #3A4658
+    static let brandSage       = Color(red: 211/255, green: 214/255, blue: 190/255) // #D3D6BE
+}
+
+/// The cream ground + top orange glow used for form surfaces (matches the
+/// expansion form interface).
+struct FormSurfaceBackground: View {
+    var body: some View {
+        ZStack {
+            Color.brandBG
+            RadialGradient(
+                colors: [Color.brandAccent.opacity(0.16), .clear],
+                center: .top, startRadius: 0, endRadius: 280)
+        }
+    }
+}
+
+/// The slate-blue ground + top glow used for the variables surface.
+struct VariableSurfaceBackground: View {
+    var body: some View {
+        ZStack {
+            Color.brandBlue
+            RadialGradient(
+                colors: [Color.brandSlate.opacity(0.14), .clear],
+                center: .top, startRadius: 0, endRadius: 280)
+        }
+    }
+}
+
 /// Brand typography: Fraunces (serif display) for headings, Newsreader (serif
 /// text) for body. Both are *variable* fonts, so we register the bundled files
 /// once and build each `Font` by setting the `wght`/`opsz` axes via CoreText —
