@@ -69,67 +69,75 @@ struct ContentView: View {
         return id.uuidString
     }
 
+    /// One sidebar category row: either an in-place rename field or the folder
+    /// label, plus drop target / selection / context-menu behaviour. Extracted
+    /// from `body` so the type-checker isn't handed one giant expression.
+    @ViewBuilder private func categoryRow(_ category: SnippetCategory) -> some View {
+        Group {
+            if renamingCategoryID == category.id {
+                renameField
+            } else {
+                // One count-1 tap fires instantly (no double-click disambiguation
+                // lag): it selects, and a second click on the already-selected row
+                // renames — Finder-style.
+                Label {
+                    Text(category.name).font(BrandFont.heading(14, weight: 540))
+                } icon: {
+                    Image(systemName: "folder")
+                }
+                .badge(category.snippets.count)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { handleCategoryClick(category) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .tag(category.id)
+        .dropDestination(for: String.self) { items, _ in
+            var moved = false
+            for item in items {
+                for line in item.split(whereSeparator: \.isNewline) {
+                    guard let sid = UUID(uuidString: String(line)) else { continue }
+                    if store.moveSnippet(sid, toCategory: category.id) { moved = true }
+                }
+            }
+            if moved { selectedSnippetIDs = [] }
+            return moved
+        } isTargeted: { targeted in
+            if targeted { dropTargetID = category.id }
+            else if dropTargetID == category.id { dropTargetID = nil }
+        }
+        .listRowBackground(
+            dropTargetID == category.id ? Color.accentColor.opacity(0.25) : Color.clear)
+        .contextMenu {
+            Button("Rename…") { beginRename(category) }
+            Button("Delete…", role: .destructive) { deletingCategoryID = category.id }
+        }
+    }
+
+    /// In-place rename field. Opaque background so the row's selection highlight
+    /// doesn't bleed through and wash out the text.
+    private var renameField: some View {
+        TextField("Name", text: $renameText)
+            .textFieldStyle(.plain)
+            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 1.5))
+            .focused($renameFieldFocused)
+            .onAppear { DispatchQueue.main.async { renameFieldFocused = true } }
+            .onSubmit(commitRename)
+            .onExitCommand { renamingCategoryID = nil }
+    }
+
     var body: some View {
         NavigationSplitView {
             // ---- Left: categories (files) ----
             List(selection: $selectedCategoryID) {
                 Section("Categories") {
                     ForEach(store.categories) { category in
-                        Group {
-                            if renamingCategoryID == category.id {
-                                // Opaque field background so the row's selection
-                                // highlight doesn't bleed through and wash out the text.
-                                TextField("Name", text: $renameText)
-                                    .textFieldStyle(.plain)
-                                    .padding(.vertical, 3)
-                                    .padding(.horizontal, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .fill(Color(nsColor: .textBackgroundColor)))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .strokeBorder(Color.accentColor, lineWidth: 1.5))
-                                    .focused($renameFieldFocused)
-                                    .onAppear { DispatchQueue.main.async { renameFieldFocused = true } }
-                                    .onSubmit(commitRename)
-                                    .onExitCommand { renamingCategoryID = nil }
-                            } else {
-                                // One count-1 tap fires instantly (no double-click
-                                // disambiguation lag): it selects, and a second click
-                                // on the already-selected row renames — Finder-style.
-                                Label(category.name, systemImage: "folder")
-                                    .badge(category.snippets.count)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { handleCategoryClick(category) }
-                            }
-                        }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .tag(category.id)
-                            .dropDestination(for: String.self) { items, _ in
-                                var moved = false
-                                for item in items {
-                                    for line in item.split(whereSeparator: \.isNewline) {
-                                        guard let sid = UUID(uuidString: String(line)) else { continue }
-                                        if store.moveSnippet(sid, toCategory: category.id) { moved = true }
-                                    }
-                                }
-                                if moved { selectedSnippetIDs = [] }
-                                return moved
-                            } isTargeted: { targeted in
-                                if targeted { dropTargetID = category.id }
-                                else if dropTargetID == category.id { dropTargetID = nil }
-                            }
-                            .listRowBackground(
-                                dropTargetID == category.id
-                                    ? Color.accentColor.opacity(0.25) : Color.clear)
-                            .contextMenu {
-                                Button("Rename…") { beginRename(category) }
-                                Button("Delete…", role: .destructive) {
-                                    deletingCategoryID = category.id
-                                }
-                            }
+                        categoryRow(category)
                     }
                 }
             }
@@ -251,10 +259,10 @@ struct SnippetRow: View {
     let preview: String
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(primary).font(.body)
+            Text(primary).font(BrandFont.body(15, weight: 500))
             if !preview.isEmpty {
                 Text(preview)
-                    .font(.caption)
+                    .font(BrandFont.body(12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -297,7 +305,7 @@ struct SnippetEditor: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 section("Triggers") {
-                    Text("One per line").font(.caption).foregroundStyle(.secondary)
+                    Text("One per line").font(BrandFont.body(11)).foregroundStyle(.secondary)
                     TextEditor(text: $triggersText)
                         .font(.body.monospaced())
                         .frame(minHeight: 54)
@@ -319,7 +327,7 @@ struct SnippetEditor: View {
 
                 section("Variables") {
                     Text("Reference these in the body as {{name}}.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(BrandFont.body(11)).foregroundStyle(.secondary)
                     ForEach($vars) { $variable in
                         VariableRow(
                             variable: $variable,
@@ -367,7 +375,7 @@ struct SnippetEditor: View {
 
     @ViewBuilder private func section(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
+            Text(title).font(BrandFont.heading(15, weight: 600))
             content()
         }
     }
@@ -448,7 +456,7 @@ struct VariableRow: View {
 
     @ViewBuilder private func labeled(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(BrandFont.body(11)).foregroundStyle(.secondary)
             content()
         }
     }
@@ -475,10 +483,10 @@ struct ContentUnavailableCompat: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: systemImage).font(.largeTitle).foregroundStyle(.tertiary)
-            Text(title).foregroundStyle(.secondary)
+            Text(title).font(BrandFont.heading(17)).foregroundStyle(.secondary)
             if let message {
                 Text(message)
-                    .font(.callout)
+                    .font(BrandFont.body(13))
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
             }

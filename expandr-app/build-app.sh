@@ -25,6 +25,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/$EXE_NAME"
 cp "$REPO/espanso/src/res/macos/icon.icns" "$APP/Contents/Resources/icon.icns"
 
+# Bundle the brand fonts (Fraunces headings, Newsreader body); registered at
+# launch via CTFontManager from Contents/Resources/Fonts.
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp "$REPO/espanso-ui/fonts/Fraunces.ttf"  "$APP/Contents/Resources/Fonts/"
+cp "$REPO/espanso-ui/fonts/Newsreader.ttf" "$APP/Contents/Resources/Fonts/"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
