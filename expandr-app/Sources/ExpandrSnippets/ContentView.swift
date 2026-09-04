@@ -523,7 +523,7 @@ struct SnippetEditor: View {
                         onDelete: { editor.vars.removeAll { $0.id == variable.id } })
                 }
             }
-            Button(action: addVariable) { Label("Add variable", systemImage: "plus") }
+            Button(action: addVariable) { Label("Add another variable", systemImage: "plus") }
                 .buttonStyle(.borderless)
         }
         .padding(14)
