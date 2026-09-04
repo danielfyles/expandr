@@ -74,11 +74,10 @@ final class FormWindowController: NSObject, NSApplicationDelegate, NSWindowDeleg
 }
 
 let app = NSApplication.shared
-// A form needs key focus for typing, so we activate as a regular app. (An
-// `.accessory` bare executable has its window force-closed by the system.)
-// Phase 3 will wrap this in an LSUIElement helper bundle to drop the Dock icon
-// while keeping focus.
-app.setActivationPolicy(.regular)
+// Runs as an LSUIElement agent (see ExpandrForm.app's Info.plist), so it takes
+// key focus for typing without ever showing a Dock icon. (A *bare* accessory
+// executable has its window force-closed by the system — a real bundle doesn't.)
+app.setActivationPolicy(.accessory)
 let controller = FormWindowController(spec: spec)
 app.delegate = controller
 app.run()
