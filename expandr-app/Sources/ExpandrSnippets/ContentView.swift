@@ -443,32 +443,7 @@ struct SnippetEditor: View {
                     GrowingTextEditor(text: $editor.triggersText, minHeight: 54)
                         .editorChrome()
                 }
-                section("Form") {
-                    if !editor.formFields.isEmpty {
-                        FormEditor(
-                            fields: $editor.formFields,
-                            varName: editor.formVarName,
-                            replaceText: editor.replace,
-                            onInsertReference: { insertionTarget.insert($0) },
-                            onPreview: runPreview)
-                            .padding(14)
-                            .background(FormSurfaceBackground())
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(Color.brandAccent.opacity(0.18), lineWidth: 2.5))
-                    } else {
-                        formPlaceholder
-                    }
-                }
-
-                section("Variables") {
-                    // Form vars are managed by the Form designer above.
-                    if editor.vars.contains(where: { $0.type != "form" }) {
-                        variablesSurface
-                    } else {
-                        variablePlaceholder
-                    }
-                }
+                optionalSections
 
                 // Replacement comes last: it stitches together the trigger, form
                 // fields and variables into the final output.
@@ -512,6 +487,72 @@ struct SnippetEditor: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(previewError ?? "")
+        }
+    }
+
+    /// The Form + Variables sections. Un-added ones are grouped under an
+    /// "Optional" heading behind a single continuous left rule (heading included,
+    /// content reaching the right edge); an added one is pulled out flush. Once
+    /// both are added the heading and rule are gone.
+    @ViewBuilder private var optionalSections: some View {
+        let formAdded = !editor.formFields.isEmpty
+        let varsAdded = editor.vars.contains { $0.type != "form" }
+        VStack(alignment: .leading, spacing: 18) {
+            if formAdded && varsAdded {
+                formSection
+                variablesSection
+            } else if formAdded {
+                formSection
+                lined { optionalHeading; variablesSection }
+            } else if varsAdded {
+                lined { optionalHeading; formSection }
+                variablesSection
+            } else {
+                lined { optionalHeading; formSection; variablesSection }
+            }
+        }
+    }
+
+    private var optionalHeading: some View {
+        Text("Optional").font(BrandFont.heading(15, weight: 600)).foregroundStyle(.secondary)
+    }
+
+    private var formSection: some View {
+        section("Form") {
+            if !editor.formFields.isEmpty {
+                FormEditor(
+                    fields: $editor.formFields,
+                    varName: editor.formVarName,
+                    replaceText: editor.replace,
+                    onInsertReference: { insertionTarget.insert($0) },
+                    onPreview: runPreview)
+                    .padding(14)
+                    .background(FormSurfaceBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.brandAccent.opacity(0.18), lineWidth: 2.5))
+            } else {
+                formPlaceholder
+            }
+        }
+    }
+
+    private var variablesSection: some View {
+        section("Variables") {
+            // Form vars are managed by the Form designer above.
+            if editor.vars.contains(where: { $0.type != "form" }) { variablesSurface }
+            else { variablePlaceholder }
+        }
+    }
+
+    /// Wrap content behind one continuous left rule + indent, reaching the right edge.
+    @ViewBuilder private func lined<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 2)
+            VStack(alignment: .leading, spacing: 18) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
