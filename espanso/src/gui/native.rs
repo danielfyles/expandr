@@ -19,9 +19,17 @@
 
 //! Native macOS UI implementations that replace the wxWidgets (modulo) windows.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
+use serde_json::json;
+use std::collections::HashMap;
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
-use crate::gui::{ModifierStateResetter, SearchItem, SearchUI, SearchUIOptionProvider};
+use crate::gui::modulo::form::ModuloFormUIOptionProvider;
+use crate::gui::{
+    FormField, FormUI, ModifierStateResetter, SearchItem, SearchUI, SearchUIOptionProvider,
+};
 
 /// A `SearchUI` backed by the in-process native AppKit search panel
 /// (`espanso-ui`), replacing the wxWidgets/modulo search window on macOS.
@@ -72,4 +80,113 @@ impl SearchUI for NativeSearchUI<'_> {
 
         Ok(result)
     }
+}
+
+/// A `FormUI` backed by the native SwiftUI form renderer (`ExpandrForm`). It
+/// speaks the same JSON contract espanso already uses for modulo forms — the
+/// spec goes in on stdin, the filled values come back on stdout — but points at
+/// our own attractive renderer instead of the wxWidgets one.
+pub struct NativeFormUI<'a> {
+    option_provider: &'a dyn ModuloFormUIOptionProvider,
+}
+
+impl<'a> NativeFormUI<'a> {
+    pub fn new(option_provider: &'a dyn ModuloFormUIOptionProvider) -> Self {
+        Self { option_provider }
+    }
+}
+
+impl FormUI for NativeFormUI<'_> {
+    fn show(
+        &self,
+        layout: &str,
+        fields: &HashMap<String, FormField>,
+    ) -> Result<Option<HashMap<String, String>>> {
+        let config = json!({
+            "title": "espanso",
+            "layout": layout,
+            "fields": fields_to_json(fields),
+            "max_form_width": self.option_provider.get_max_form_width(),
+            "max_form_height": self.option_provider.get_max_form_height(),
+        });
+        let json_config = serde_json::to_string(&config)?;
+
+        let bin = form_renderer_path()?;
+        let mut child = Command::new(&bin)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        // Write the spec and close stdin so the renderer's read-to-EOF returns.
+        {
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("failed to open form renderer stdin"))?;
+            stdin.write_all(json_config.as_bytes())?;
+        }
+
+        // Blocks this render thread until the user submits/cancels — same as the
+        // modulo subprocess did.
+        let output = child.wait_with_output()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let values: HashMap<String, String> = serde_json::from_str(stdout.trim()).unwrap_or_default();
+
+        let post_form_delay = self.option_provider.get_post_form_delay();
+        if post_form_delay > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(post_form_delay as u64));
+        }
+
+        // An empty result means the user cancelled → no expansion.
+        if values.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(values))
+        }
+    }
+}
+
+/// Serialize form fields into the same JSON object shape espanso's modulo path
+/// emits (so the renderer can be schema-compatible with both).
+fn fields_to_json(fields: &HashMap<String, FormField>) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    for (name, field) in fields {
+        let value = match field {
+            FormField::Text { default, multiline } => json!({
+                "type": "text", "default": default, "multiline": multiline,
+            }),
+            FormField::Choice { default, values } => json!({
+                "type": "choice", "default": default, "values": values,
+            }),
+            FormField::List {
+                default,
+                values,
+                separator,
+            } => json!({
+                "type": "list", "default": default, "values": values, "separator": separator,
+            }),
+        };
+        obj.insert(name.clone(), value);
+    }
+    serde_json::Value::Object(obj)
+}
+
+/// Locate the `ExpandrForm` renderer: `$EXPANDR_FORM_BIN` if set (used in dev),
+/// otherwise a sibling of the running executable.
+fn form_renderer_path() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("EXPANDR_FORM_BIN") {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sibling = dir.join("ExpandrForm");
+            if sibling.exists() {
+                return Ok(sibling);
+            }
+        }
+    }
+    bail!("could not locate the ExpandrForm renderer (set EXPANDR_FORM_BIN)")
 }

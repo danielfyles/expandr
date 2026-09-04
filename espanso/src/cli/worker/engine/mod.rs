@@ -113,8 +113,17 @@ pub fn initialize_and_spawn(
             let default_config = &*config_manager.default();
 
             let modulo_manager = crate::gui::modulo::manager::ModuloManager::new();
+            // Form UI: native SwiftUI renderer (ExpandrForm) on macOS, wxWidgets/
+            // modulo elsewhere.
+            #[cfg(not(target_os = "macos"))]
             let modulo_form_ui =
                 crate::gui::modulo::form::ModuloFormUI::new(&modulo_manager, &config_manager);
+            #[cfg(target_os = "macos")]
+            let native_form_ui = crate::gui::native::NativeFormUI::new(&config_manager);
+            #[cfg(target_os = "macos")]
+            let form_ui: &dyn crate::gui::FormUI = &native_form_ui;
+            #[cfg(not(target_os = "macos"))]
+            let form_ui: &dyn crate::gui::FormUI = &modulo_form_ui;
             let modulo_text_ui = crate::gui::modulo::textview::ModuloTextUI::new(&modulo_manager);
 
             let context: Box<dyn Context> = Box::new(super::context::DefaultContext::new(
@@ -222,7 +231,7 @@ pub fn initialize_and_spawn(
             );
             let shell_extension =
                 espanso_render::extension::shell::ShellExtension::new(&paths.config);
-            let form_adapter = FormProviderAdapter::new(&modulo_form_ui);
+            let form_adapter = FormProviderAdapter::new(form_ui);
             let form_extension = espanso_render::extension::form::FormExtension::new(&form_adapter);
             let choice_adapter = ChoiceSelectorAdapter::new(search_ui);
             let choice_extension =

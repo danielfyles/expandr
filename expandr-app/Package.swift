@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "ExpandrSnippets",
             dependencies: ["Yams"]
-        )
+        ),
+        // Native form renderer: reads an espanso form spec as JSON on stdin,
+        // shows the form, writes the filled values as JSON on stdout.
+        .executableTarget(
+            name: "ExpandrForm"
+        ),
     ]
 )

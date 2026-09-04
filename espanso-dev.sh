@@ -25,6 +25,9 @@ export ESPANSO_CONFIG_DIR="$HOME/espanso-dev/config"
 export ESPANSO_RUNTIME_DIR="$HOME/espanso-dev/runtime"
 export ESPANSO_PACKAGE_DIR="$HOME/espanso-dev/packages"
 export MAC_LAUNCH_CONTEXT=cli
+# Native SwiftUI form renderer used by NativeFormUI (the daemon passes this env
+# to its worker child, which spawns the renderer when a form match fires).
+export EXPANDR_FORM_BIN="$REPO/expandr-app/.build/release/ExpandrForm"
 
 seed_config() {
   mkdir -p "$ESPANSO_CONFIG_DIR/config" "$ESPANSO_CONFIG_DIR/match" \
@@ -60,6 +63,9 @@ case "${1:-}" in
     # skips existing files), so clear the cached ones to pick up icon changes.
     rm -f "$ESPANSO_RUNTIME_DIR"/*v2.png 2>/dev/null || true
     echo "cleared extracted icon cache in runtime dir"
+    # Build the native SwiftUI form renderer.
+    ( cd "$REPO/expandr-app" && swift build -c release --product ExpandrForm >/dev/null ) \
+      && echo "built form renderer: $EXPANDR_FORM_BIN"
     ;;
   start)
     seed_config
