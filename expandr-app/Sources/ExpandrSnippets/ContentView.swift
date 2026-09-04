@@ -15,6 +15,16 @@ struct ContentView: View {
     @State private var deletingCategoryID: SnippetCategory.ID?
     @State private var lastCategoryClickAt: Date?
 
+    // The lifted editor state + a pending navigation held back by unsaved changes.
+    @StateObject private var editor = EditorModel()
+    @State private var pendingNav: PendingNav?
+
+    private enum PendingNav {
+        case snippets(Set<Snippet.ID>)
+        case category(SnippetCategory.ID?)
+        case newCategoryPrompt   // open the name dialog after resolving
+    }
+
     private var selectedCategory: SnippetCategory? {
         store.categories.first { $0.id == selectedCategoryID }
     }
@@ -45,9 +55,87 @@ struct ContentView: View {
             beginRename(category)
             lastCategoryClickAt = nil
         } else {
-            selectedCategoryID = category.id
+            requestCategory(category.id)
             lastCategoryClickAt = now
         }
+    }
+
+    // MARK: - Navigation guarded by unsaved changes
+
+    private var pendingNavBinding: Binding<Bool> {
+        Binding(get: { pendingNav != nil }, set: { if !$0 { pendingNav = nil } })
+    }
+
+    /// Request a new snippet selection; hold it back behind a prompt if dirty.
+    private func requestSnippets(_ new: Set<Snippet.ID>) {
+        if editor.isDirty && new != selectedSnippetIDs {
+            pendingNav = .snippets(new)
+        } else {
+            applySnippets(new)
+        }
+    }
+
+    private func applySnippets(_ new: Set<Snippet.ID>) {
+        selectedSnippetIDs = new
+        if new.count == 1, let id = new.first,
+           let snip = selectedCategory?.snippets.first(where: { $0.id == id }) {
+            editor.load(snip)
+        } else {
+            editor.clear()
+        }
+    }
+
+    private func requestCategory(_ id: SnippetCategory.ID?) {
+        if editor.isDirty && id != selectedCategoryID {
+            pendingNav = .category(id)
+        } else {
+            applyCategory(id)
+        }
+    }
+
+    private func applyCategory(_ id: SnippetCategory.ID?) {
+        selectedCategoryID = id
+        selectedSnippetIDs = []
+        editor.clear()
+    }
+
+    /// Resolve the unsaved-changes prompt: optionally save, then navigate.
+    private func resolvePending(save: Bool) {
+        if save, let categoryID = selectedCategoryID {
+            saveCurrent(categoryID: categoryID)
+        }
+        switch pendingNav {
+        case .snippets(let new): applySnippets(new)
+        case .category(let id): applyCategory(id)
+        case .newCategoryPrompt:
+            // Open the name dialog on the next runloop so it doesn't collide with
+            // the confirmation dialog that's dismissing.
+            DispatchQueue.main.async { newCategoryName = ""; showNewCategory = true }
+        case .none: break
+        }
+        pendingNav = nil
+    }
+
+    private func startNewCategory() {
+        if editor.isDirty {
+            pendingNav = .newCategoryPrompt
+        } else {
+            newCategoryName = ""
+            showNewCategory = true
+        }
+    }
+
+    private func saveCurrent(categoryID: SnippetCategory.ID) {
+        guard let updated = editor.buildSnippet() else { return }
+        store.save(updated, inCategory: categoryID)
+        editor.load(updated)  // reset the dirty baseline
+    }
+
+    private func deleteCurrent(categoryID: SnippetCategory.ID) {
+        guard let snippet = editor.snippet else { return }
+        store.deleteSnippet(snippet.id, inCategory: categoryID)
+        editor.clear()
+        selectedSnippetIDs = []
     }
 
     /// Commit an in-place category rename (Enter or focus loss). Esc cancels by
@@ -102,7 +190,7 @@ struct ContentView: View {
                     if store.moveSnippet(sid, toCategory: category.id) { moved = true }
                 }
             }
-            if moved { selectedSnippetIDs = [] }
+            if moved { selectedSnippetIDs = []; editor.clear() }
             return moved
         } isTargeted: { targeted in
             if targeted { dropTargetID = category.id }
@@ -134,7 +222,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             // ---- Left: categories (files) ----
-            List(selection: $selectedCategoryID) {
+            List(selection: Binding(get: { selectedCategoryID }, set: { requestCategory($0) })) {
                 Section("Categories") {
                     ForEach(store.categories) { category in
                         categoryRow(category)
@@ -144,10 +232,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 4) {
-                    Button {
-                        newCategoryName = ""
-                        showNewCategory = true
-                    } label: {
+                    Button(action: startNewCategory) {
                         Image(systemName: "plus")
                     }
                     .buttonStyle(.borderless)
@@ -162,7 +247,7 @@ struct ContentView: View {
         } content: {
             // ---- Middle: snippets in the selected category ----
             if let category = selectedCategory {
-                List(selection: $selectedSnippetIDs) {
+                List(selection: Binding(get: { selectedSnippetIDs }, set: { requestSnippets($0) })) {
                     ForEach(category.snippets) { snippet in
                         SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
                             .tag(snippet.id)
@@ -175,7 +260,7 @@ struct ContentView: View {
                     HStack {
                         Button {
                             if let id = store.addSnippet(toCategory: category.id) {
-                                selectedSnippetIDs = [id]
+                                requestSnippets([id])
                             }
                         } label: {
                             Label("New Snippet", systemImage: "plus")
@@ -191,16 +276,11 @@ struct ContentView: View {
             }
         } detail: {
             // ---- Right: snippet editor ----
-            if let snippet = selectedSnippet, let categoryID = selectedCategoryID {
+            if editor.snippet != nil, let categoryID = selectedCategoryID {
                 SnippetEditor(
-                    snippet: snippet,
-                    onSave: { store.save($0, inCategory: categoryID) },
-                    onDelete: {
-                        store.deleteSnippet(snippet.id, inCategory: categoryID)
-                        selectedSnippetIDs = []
-                    }
-                )
-                .id(snippet.id)  // reset editor state when the selection changes
+                    editor: editor,
+                    onSave: { saveCurrent(categoryID: categoryID) },
+                    onDelete: { deleteCurrent(categoryID: categoryID) })
             } else if selectedSnippetIDs.count > 1 {
                 ContentUnavailableCompat(
                     "\(selectedSnippetIDs.count) snippets selected",
@@ -210,12 +290,21 @@ struct ContentView: View {
                 ContentUnavailableCompat("Select a snippet", systemImage: "text.cursor")
             }
         }
-        .onChange(of: selectedCategoryID) { _ in selectedSnippetIDs = [] }
+        .confirmationDialog(
+            "You have unsaved changes", isPresented: pendingNavBinding, titleVisibility: .visible
+        ) {
+            Button("Save") { resolvePending(save: true) }
+            Button("Discard", role: .destructive) { resolvePending(save: false) }
+            Button("Cancel", role: .cancel) { pendingNav = nil }
+        } message: {
+            Text("Save your changes to this snippet before continuing?")
+        }
         .alert("New Category", isPresented: $showNewCategory) {
             TextField("Name", text: $newCategoryName)
             Button("Create") {
+                // Unsaved changes were already resolved before this dialog opened.
                 if let id = store.addCategory(named: newCategoryName) {
-                    selectedCategoryID = id
+                    applyCategory(id)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -231,7 +320,7 @@ struct ContentView: View {
         ) {
             Button("Move to Trash", role: .destructive) {
                 if let id = deletingCategoryID {
-                    if selectedCategoryID == id { selectedCategoryID = nil }
+                    if selectedCategoryID == id { applyCategory(nil) }
                     store.deleteCategory(id)
                 }
             }
@@ -272,62 +361,31 @@ struct SnippetRow: View {
 }
 
 struct SnippetEditor: View {
-    let snippet: Snippet
-    let onSave: (Snippet) -> Void
+    @ObservedObject var editor: EditorModel
+    let onSave: () -> Void
     let onDelete: () -> Void
-
-    @State private var label: String
-    @State private var triggersText: String
-    @State private var replace: String
-    @State private var vars: [SnippetVar]
-    @State private var formFields: [FormFieldSpec]
-    @State private var formVarName: String
     @State private var previewError: String?
-
-    /// Only plain `replace` snippets are body-editable for now; markdown / html /
-    /// form / image bodies are preserved untouched.
-    private var replaceEditable: Bool {
-        snippet.kind == .replace || snippet.kind == .other
-    }
-
-    init(snippet: Snippet, onSave: @escaping (Snippet) -> Void, onDelete: @escaping () -> Void) {
-        self.snippet = snippet
-        self.onSave = onSave
-        self.onDelete = onDelete
-        _label = State(initialValue: snippet.label ?? "")
-        _triggersText = State(initialValue: snippet.triggers.joined(separator: "\n"))
-        _replace = State(initialValue: snippet.replace ?? "")
-        _vars = State(initialValue: snippet.vars)
-
-        if let formVar = FormBuilder.formVar(in: snippet) {
-            _formFields = State(initialValue: FormBuilder.parse(formVar))
-            _formVarName = State(initialValue: formVar.name.isEmpty ? "form1" : formVar.name)
-        } else {
-            _formFields = State(initialValue: [])
-            _formVarName = State(initialValue: "form1")
-        }
-    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 section("Label") {
-                    TextField("Optional description", text: $label)
+                    TextField("Optional description", text: $editor.label)
                         .textFieldStyle(.roundedBorder)
                 }
                 section("Triggers") {
-                    Text("One per line").font(BrandFont.body(11)).foregroundStyle(.secondary)
-                    TextEditor(text: $triggersText)
+                    Text("One per line").font(.system(size: 11)).foregroundStyle(.secondary)
+                    TextEditor(text: $editor.triggersText)
                         .font(.body.monospaced())
                         .frame(minHeight: 54)
                         .editorChrome()
                 }
                 section("Form") {
-                    if !formFields.isEmpty {
+                    if !editor.formFields.isEmpty {
                         FormEditor(
-                            fields: $formFields,
-                            varName: formVarName,
-                            onInsertReference: { replace += $0 },
+                            fields: $editor.formFields,
+                            varName: editor.formVarName,
+                            onInsertReference: { editor.replace += $0 },
                             onPreview: runPreview)
                             .padding(14)
                             .background(FormSurfaceBackground())
@@ -341,7 +399,7 @@ struct SnippetEditor: View {
 
                 section("Variables") {
                     // Form vars are managed by the Form designer above.
-                    if vars.contains(where: { $0.type != "form" }) {
+                    if editor.vars.contains(where: { $0.type != "form" }) {
                         variablesSurface
                     } else {
                         variablePlaceholder
@@ -350,19 +408,20 @@ struct SnippetEditor: View {
 
                 // Replacement comes last: it stitches together the trigger, form
                 // fields and variables into the final output.
-                if replaceEditable {
+                if editor.replaceEditable {
                     section("Replacement") {
-                        TextEditor(text: $replace)
+                        TextEditor(text: $editor.replace)
                             .font(.body.monospaced())
                             .frame(minHeight: 160)
                             .padding(6)
-                            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
+                            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12)
                                 .strokeBorder(Color.brandSage, lineWidth: 2.5))
                     }
                 } else {
-                    section("Replacement (\(snippet.kind.rawValue))") {
-                        Text("Editing \(snippet.kind.rawValue) snippets isn't supported yet — it's preserved as-is.")
+                    let kind = editor.snippet?.kind.rawValue ?? "this"
+                    section("Replacement (\(kind))") {
+                        Text("Editing \(kind) snippets isn't supported yet — it's preserved as-is.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
@@ -370,16 +429,17 @@ struct SnippetEditor: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle(snippet.primaryText)
+        .navigationTitle(editor.snippet?.primaryText ?? "")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(role: .destructive, action: onDelete) {
                     Label("Delete", systemImage: "trash")
                 }
-                Button(action: save) {
+                Button(action: onSave) {
                     Label("Save", systemImage: "checkmark")
                 }
                 .keyboardShortcut("s", modifiers: .command)
+                .disabled(!editor.isDirty)
             }
         }
         .alert("Preview", isPresented: Binding(
@@ -396,13 +456,13 @@ struct SnippetEditor: View {
     private var variablesSurface: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Reference these in the body as {{name}}.")
-                .font(BrandFont.body(11)).foregroundStyle(Color.brandSlate.opacity(0.8))
-            ForEach($vars) { $variable in
+                .font(.system(size: 11)).foregroundStyle(Color.brandSlate.opacity(0.8))
+            ForEach($editor.vars) { $variable in
                 if variable.type != "form" {
                     VariableRow(
                         variable: $variable,
-                        onInsert: { replace += "{{\(variable.name)}}" },
-                        onDelete: { vars.removeAll { $0.id == variable.id } })
+                        onInsert: { editor.replace += "{{\(variable.name)}}" },
+                        onDelete: { editor.vars.removeAll { $0.id == variable.id } })
                 }
             }
             Button(action: addVariable) { Label("Add variable", systemImage: "plus") }
@@ -440,7 +500,7 @@ struct SnippetEditor: View {
     }
 
     private func addVariable() {
-        vars.append(SnippetVar(name: "var\(vars.count + 1)", type: "echo", params: [:], raw: [:]))
+        editor.vars.append(SnippetVar(name: "var\(editor.vars.count + 1)", type: "echo", params: [:], raw: [:]))
     }
 
     /// The dashed cream placeholder shown when the snippet has no form yet.
@@ -468,41 +528,18 @@ struct SnippetEditor: View {
     }
 
     private func addForm() {
-        if formFields.isEmpty {
-            formFields = [FormFieldSpec(
+        if editor.formFields.isEmpty {
+            editor.formFields = [FormFieldSpec(
                 label: "Name", name: "name", kind: .text, defaultValue: "", values: [])]
         }
     }
 
     private func runPreview() {
         do {
-            try FormPreview.show(title: snippet.primaryText, fields: formFields)
+            try FormPreview.show(title: editor.snippet?.primaryText ?? "espanso", fields: editor.formFields)
         } catch {
             previewError = error.localizedDescription
         }
-    }
-
-    private func save() {
-        var updated = snippet
-        updated.label = label.isEmpty ? nil : label
-        updated.triggers = triggersText
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        if replaceEditable { updated.replace = replace }
-
-        // Rebuild vars: keep non-form vars, re-serialise the form from the designer.
-        var newVars = vars.filter { $0.type != "form" }
-        if !formFields.isEmpty {
-            var formVar = FormBuilder.formVar(in: snippet)
-                ?? SnippetVar(name: formVarName, type: "form", params: [:], raw: [:])
-            formVar.name = formVarName
-            formVar.type = "form"
-            formVar.params = FormBuilder.params(from: formFields)
-            newVars.insert(formVar, at: 0)
-        }
-        updated.vars = newVars
-        onSave(updated)
     }
 
     @ViewBuilder private func section(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
@@ -589,7 +626,7 @@ struct VariableRow: View {
 
     @ViewBuilder private func labeled(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(BrandFont.body(11)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
             content()
         }
     }
