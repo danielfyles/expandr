@@ -78,9 +78,11 @@ struct SnippetVar: Identifiable {
     var params: [String: Any]
     var raw: [String: Any]
 
-    /// Variable types espanso supports, in a sensible order for the picker.
+    /// Variable types offered in the picker, in a sensible order. (`echo`, a
+    /// static value, is intentionally omitted — it's still parsed/edited if an
+    /// existing var uses it, just not offered as a new choice.)
     static let knownTypes = [
-        "date", "echo", "shell", "script", "clipboard", "random", "choice", "form", "match",
+        "date", "shell", "script", "clipboard", "random", "choice", "form", "match",
     ]
 }
 

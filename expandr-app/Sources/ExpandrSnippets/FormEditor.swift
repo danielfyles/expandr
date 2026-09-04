@@ -62,7 +62,7 @@ struct FormFieldRow: View {
                     .labelsHidden()
                 }
                 Spacer()
-                Button(action: onInsert) { Image(systemName: "arrow.up.left.square") }
+                Button(action: onInsert) { Image(systemName: "arrow.down.square") }
                     .buttonStyle(.borderless)
                     .help("Insert {{…\(field.name)}} into the body")
                 Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }

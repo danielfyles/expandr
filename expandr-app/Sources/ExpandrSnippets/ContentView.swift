@@ -19,6 +19,11 @@ struct ContentView: View {
     @StateObject private var editor = EditorModel()
     @State private var pendingNav: PendingNav?
 
+    // Remember the last-selected category (by name — ids are regenerated each
+    // load) across launches; the snippet selection is intentionally not restored.
+    @AppStorage("lastCategoryName") private var lastCategoryName = ""
+    @State private var didRestoreCategory = false
+
     private enum PendingNav {
         case snippets(Set<Snippet.ID>)
         case category(SnippetCategory.ID?)
@@ -97,6 +102,20 @@ struct ContentView: View {
         selectedCategoryID = id
         selectedSnippetIDs = []
         editor.clear()
+        if let category = store.categories.first(where: { $0.id == id }) {
+            lastCategoryName = category.name
+        }
+    }
+
+    /// Restore the last-selected category on launch (by name); fall back to the
+    /// first if it's gone. Runs once.
+    private func restoreCategorySelection() {
+        guard !didRestoreCategory else { return }
+        didRestoreCategory = true
+        guard selectedCategoryID == nil else { return }
+        let match = store.categories.first { $0.name == lastCategoryName }
+            ?? store.categories.first
+        if let match { applyCategory(match.id) }
     }
 
     /// Resolve the unsaved-changes prompt: optionally save, then navigate.
@@ -136,6 +155,42 @@ struct ContentView: View {
         store.deleteSnippet(snippet.id, inCategory: categoryID)
         editor.clear()
         selectedSnippetIDs = []
+    }
+
+    /// The dashed "New Snippet" placeholder pinned above the snippet list.
+    private func newSnippetPlaceholder(_ category: SnippetCategory) -> some View {
+        Button {
+            if let id = store.addSnippet(toCategory: category.id) {
+                requestSnippets([id])
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .foregroundStyle(Color.accentColor)
+                Text("New Snippet")
+                    .foregroundStyle(.primary)  // match the snippet-row text colour
+                    .offset(y: 1.5)  // optical nudge: the serif text reads high vs the +
+            }
+            .font(BrandFont.body(15, weight: 500))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            // The content's own top gap sets the row height, so the dashed border
+            // (drawn as the row background, matching selection width) lines up with
+            // the content vertically.
+            .padding(.top, 10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Delete a snippet from a swipe/context action, keeping selection + editor
+    /// consistent if it happened to be the open one.
+    private func deleteSnippetRow(_ snippet: Snippet, in category: SnippetCategory) {
+        store.deleteSnippet(snippet.id, inCategory: category.id)
+        selectedSnippetIDs.remove(snippet.id)
+        if editor.snippet?.id == snippet.id {
+            editor.clear()
+        }
     }
 
     /// Commit an in-place category rename (Enter or focus loss). Esc cancels by
@@ -252,25 +307,31 @@ struct ContentView: View {
                         SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
                             .tag(snippet.id)
                             .draggable(dragPayload(for: snippet.id, in: category))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteSnippetRow(snippet, in: category)
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    deleteSnippetRow(snippet, in: category)
+                                }
+                            }
                     }
+                    // Sits directly below the last snippet and scrolls with them.
+                    // The dashed border is the row background, so it lines up with
+                    // the selection highlight's rounded rect exactly.
+                    newSnippetPlaceholder(category)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 8).strokeBorder(
+                                Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                                .padding(.top, 10)
+                                .padding(.horizontal, 10))
                 }
                 .navigationTitle(category.name)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300)
-                .safeAreaInset(edge: .top) {
-                    HStack {
-                        Button {
-                            if let id = store.addSnippet(toCategory: category.id) {
-                                requestSnippets([id])
-                            }
-                        } label: {
-                            Label("New Snippet", systemImage: "plus")
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.bar)
-                }
             } else {
                 ContentUnavailableCompat("Select a category", systemImage: "folder")
             }
@@ -336,6 +397,7 @@ struct ContentView: View {
                     .padding(8)
             }
         }
+        .onAppear { restoreCategorySelection() }
     }
 }
 
@@ -500,7 +562,7 @@ struct SnippetEditor: View {
     }
 
     private func addVariable() {
-        editor.vars.append(SnippetVar(name: "var\(editor.vars.count + 1)", type: "echo", params: [:], raw: [:]))
+        editor.vars.append(SnippetVar(name: "var\(editor.vars.count + 1)", type: "date", params: [:], raw: [:]))
     }
 
     /// The dashed cream placeholder shown when the snippet has no form yet.
@@ -563,12 +625,17 @@ struct VariableRow: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 150)
                 Picker("", selection: $variable.type) {
-                    ForEach(SnippetVar.knownTypes, id: \.self) { Text($0).tag($0) }
+                    // Keep the current type selectable even if it's not offered
+                    // (e.g. a legacy `echo` var), so it isn't silently changed.
+                    let types = SnippetVar.knownTypes.contains(variable.type)
+                        ? SnippetVar.knownTypes
+                        : [variable.type] + SnippetVar.knownTypes
+                    ForEach(types, id: \.self) { Text($0).tag($0) }
                 }
                 .labelsHidden()
                 .frame(width: 130)
                 Spacer()
-                Button(action: onInsert) { Image(systemName: "arrow.up.left.square") }
+                Button(action: onInsert) { Image(systemName: "arrow.down.square") }
                     .buttonStyle(.borderless)
                     .help("Insert {{\(variable.name)}} into the body")
                 Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }
