@@ -171,8 +171,11 @@ fn fields_to_json(fields: &HashMap<String, FormField>) -> serde_json::Value {
     serde_json::Value::Object(obj)
 }
 
-/// Locate the `ExpandrForm` renderer: `$EXPANDR_FORM_BIN` if set (used in dev),
-/// otherwise a sibling of the running executable.
+/// Locate the `ExpandrForm` renderer:
+/// 1. `$EXPANDR_FORM_BIN` if set (used in dev),
+/// 2. the nested helper bundle in the shipping app
+///    (`Expandr.app/Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm`),
+/// 3. a bare sibling of the running executable.
 fn form_renderer_path() -> Result<PathBuf> {
     if let Ok(path) = std::env::var("EXPANDR_FORM_BIN") {
         let path = PathBuf::from(path);
@@ -181,7 +184,15 @@ fn form_renderer_path() -> Result<PathBuf> {
         }
     }
     if let Ok(exe) = std::env::current_exe() {
+        // exe is Expandr.app/Contents/MacOS/espanso → dir is Contents/MacOS.
         if let Some(dir) = exe.parent() {
+            if let Some(contents) = dir.parent() {
+                let nested =
+                    contents.join("Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm");
+                if nested.exists() {
+                    return Ok(nested);
+                }
+            }
             let sibling = dir.join("ExpandrForm");
             if sibling.exists() {
                 return Ok(sibling);

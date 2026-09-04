@@ -31,11 +31,22 @@ main() {
 
   if [[ "${espanso_bin}" != universal ]]; then
     cp "${espanso_bin}" "${TARGET_DIR}/Contents/MacOS/espanso"
-    return
+  else
+    lipo -create \
+      -output "${TARGET_DIR}/Contents/MacOS/espanso" \
+      target/aarch64-apple-darwin/release/espanso target/x86_64-apple-darwin/release/espanso
   fi
 
-  lipo -create \
-    -output "${TARGET_DIR}/Contents/MacOS/espanso" \
-    target/aarch64-apple-darwin/release/espanso target/x86_64-apple-darwin/release/espanso
+  bundle_form_helper
+}
+
+# Build the native SwiftUI form renderer and nest it as a helper app, where
+# NativeFormUI looks for it (Contents/Helpers/ExpandrForm.app). Signed inside-out
+# so the outer app can be signed/notarised over it.
+bundle_form_helper() {
+  ( cd expandr-app && ./build-form-app.sh >/dev/null )
+  mkdir -p "${TARGET_DIR}/Contents/Helpers"
+  cp -R expandr-app/build/ExpandrForm.app "${TARGET_DIR}/Contents/Helpers/"
+  echo "nested form renderer: ${TARGET_DIR}/Contents/Helpers/ExpandrForm.app"
 }
 main "$@"
