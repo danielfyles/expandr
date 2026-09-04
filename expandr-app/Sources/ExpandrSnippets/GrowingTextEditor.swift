@@ -23,6 +23,7 @@ struct GrowingTextEditor: NSViewRepresentable {
     @Binding var text: String
     var minHeight: CGFloat = 54
     var placeholder: String = ""
+    var isEditable: Bool = true
     var insertionTarget: TextInsertionTarget? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -33,6 +34,7 @@ struct GrowingTextEditor: NSViewRepresentable {
         view.placeholder = placeholder
         insertionTarget?.textView = view
         view.delegate = context.coordinator
+        view.isEditable = isEditable
         view.isRichText = false
         view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         view.textColor = .labelColor
@@ -49,6 +51,7 @@ struct GrowingTextEditor: NSViewRepresentable {
     func updateNSView(_ view: GrowingNSTextView, context: Context) {
         view.minHeightConstant = minHeight
         view.placeholder = placeholder
+        view.isEditable = isEditable
         insertionTarget?.textView = view
         if view.string != text { view.string = text }
         view.invalidateIntrinsicContentSize()

@@ -1,7 +1,8 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
-    @StateObject private var store = SnippetStore()
+    @ObservedObject var store: SnippetStore
     @State private var selectedCategoryID: SnippetCategory.ID?
     @State private var selectedSnippetIDs: Set<Snippet.ID> = []
     @State private var dropTargetID: SnippetCategory.ID?
@@ -9,6 +10,7 @@ struct ContentView: View {
     // New-category / rename / delete dialogs
     @State private var showNewCategory = false
     @State private var newCategoryName = ""
+    @State private var newCategorySourceID: UUID?
     @State private var renamingCategoryID: SnippetCategory.ID?
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
@@ -50,7 +52,24 @@ struct ContentView: View {
                 set: { if !$0 { deletingCategoryID = nil } })
     }
 
+    /// Open the Preferences (Settings) window by selecting the same menu item the
+    /// SwiftUI `Settings` scene installs — `performActionForItem` dispatches it
+    /// exactly as a real menu pick, which is more reliable than sending the
+    /// private selector down the responder chain ourselves.
+    private func openSettings() {
+        guard let appMenu = NSApp.mainMenu?.item(at: 0)?.submenu else { return }
+        let index = appMenu.items.firstIndex { menuItem in
+            if let action = menuItem.action {
+                let name = NSStringFromSelector(action)
+                if name.contains("showSettings") || name.contains("showPreferences") { return true }
+            }
+            return menuItem.title.hasPrefix("Settings") || menuItem.title.hasPrefix("Preferences")
+        }
+        if let index { appMenu.performActionForItem(at: index) }
+    }
+
     private func beginRename(_ category: SnippetCategory) {
+        guard !category.isReadOnly else { return }
         renameText = category.name
         renamingCategoryID = category.id
     }
@@ -144,7 +163,8 @@ struct ContentView: View {
         pendingNav = nil
     }
 
-    private func startNewCategory() {
+    private func startNewCategory(for sourceID: UUID) {
+        newCategorySourceID = sourceID
         if editor.isDirty {
             pendingNav = .newCategoryPrompt
         } else {
@@ -263,9 +283,50 @@ struct ContentView: View {
         .listRowBackground(
             dropTargetID == category.id ? Color.accentColor.opacity(0.25) : Color.clear)
         .contextMenu {
-            Button("Rename…") { beginRename(category) }
-            Button("Delete…", role: .destructive) { deletingCategoryID = category.id }
+            if category.isReadOnly {
+                Label("Read-only", systemImage: "lock.fill")
+            } else {
+                Button("Rename…") { beginRename(category) }
+                Button("Delete…", role: .destructive) { deletingCategoryID = category.id }
+            }
         }
+    }
+
+    /// A sidebar section header: the source's name, a lock if read-only, and a
+    /// "+" to create a new category in that source (hidden when read-only).
+    @ViewBuilder private func sourceHeader(_ source: SnippetSource) -> some View {
+        HStack(spacing: 4) {
+            Text(source.displayName)
+            if source.isReadOnly {
+                Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            if !source.isReadOnly {
+                Button { startNewCategory(for: source.id) } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help("New category in \(source.displayName)")
+                // Match the trailing inset of the per-row folder counts (badges),
+                // so the "+" doesn't sit hard against the sidebar edge.
+                .padding(.trailing, 10)
+            }
+        }
+    }
+
+    /// A hash of the sidebar's structure — sources and their categories (identity
+    /// and name, not snippet counts, so editing snippets doesn't rebuild the
+    /// sidebar). Used as the List's `.id` so add/rename/delete/source changes
+    /// force a clean rebuild.
+    private var sidebarSignature: Int {
+        var hasher = Hasher()
+        for s in store.sources {
+            hasher.combine(s.id); hasher.combine(s.isReadOnly); hasher.combine(s.displayName)
+        }
+        for c in store.categories {
+            hasher.combine(c.id); hasher.combine(c.sourceID); hasher.combine(c.name)
+        }
+        return hasher.finalize()
     }
 
     private var isSearching: Bool {
@@ -288,32 +349,48 @@ struct ContentView: View {
         }
     }
 
+    /// Category snippets in list order: sorted by their trigger (falling back to
+    /// regex/label via `primaryText`) — the canonical identity of a snippet —
+    /// 0-9 then A-Z (case-insensitive, natural number ordering), rather than the
+    /// order they happen to sit in the file.
+    private func sortedSnippets(_ category: SnippetCategory) -> [Snippet] {
+        category.snippets.sorted {
+            $0.primaryText.localizedStandardCompare($1.primaryText) == .orderedAscending
+        }
+    }
+
     /// The normal list of a category's snippets (with drag, delete, New Snippet).
     @ViewBuilder private func categorySnippetsList(_ category: SnippetCategory) -> some View {
         List(selection: Binding(get: { selectedSnippetIDs }, set: { requestSnippets($0) })) {
-            ForEach(category.snippets) { snippet in
+            ForEach(sortedSnippets(category)) { snippet in
                 SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
                     .tag(snippet.id)
                     .draggable(dragPayload(for: snippet.id, in: category))
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            deleteSnippetRow(snippet, in: category)
-                        } label: { Label("Delete", systemImage: "trash") }
+                        if !category.isReadOnly {
+                            Button(role: .destructive) {
+                                deleteSnippetRow(snippet, in: category)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
                     }
                     .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            deleteSnippetRow(snippet, in: category)
+                        if !category.isReadOnly {
+                            Button("Delete", role: .destructive) {
+                                deleteSnippetRow(snippet, in: category)
+                            }
                         }
                     }
             }
-            newSnippetPlaceholder(category)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(
-                    RoundedRectangle(cornerRadius: 8).strokeBorder(
-                        Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                        .padding(.top, 10)
-                        .padding(.horizontal, 10))
+            if !category.isReadOnly {
+                newSnippetPlaceholder(category)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(
+                            Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                            .padding(.top, 10)
+                            .padding(.horizontal, 10))
+            }
         }
     }
 
@@ -332,13 +409,17 @@ struct ContentView: View {
                     }
                     .tag(item.snippet.id)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            deleteSnippetRow(item.snippet, in: item.category)
-                        } label: { Label("Delete", systemImage: "trash") }
+                        if !item.category.isReadOnly {
+                            Button(role: .destructive) {
+                                deleteSnippetRow(item.snippet, in: item.category)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
                     }
                     .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            deleteSnippetRow(item.snippet, in: item.category)
+                        if !item.category.isReadOnly {
+                            Button("Delete", role: .destructive) {
+                                deleteSnippetRow(item.snippet, in: item.category)
+                            }
                         }
                     }
                 }
@@ -391,24 +472,31 @@ struct ContentView: View {
             // While searching, drop the selection highlight and dim the sidebar.
             List(selection: Binding(get: { isSearching ? nil : selectedCategoryID },
                                     set: { requestCategory($0) })) {
-                Section("Categories") {
-                    ForEach(store.categories) { category in
-                        categoryRow(category)
+                ForEach(store.sources) { source in
+                    Section {
+                        ForEach(store.categories.filter { $0.sourceID == source.id }) { category in
+                            categoryRow(category)
+                        }
+                    } header: {
+                        sourceHeader(source)
                     }
                 }
             }
+            // Rebuild the sidebar when the set of sources/categories changes.
+            // SwiftUI's nested section ForEach doesn't reliably re-render a
+            // section's rows when `categories` is reassigned live (e.g. after
+            // adding a folder), so key the List on a content signature.
+            .id(sidebarSignature)
             .opacity(isSearching ? 0.45 : 1)
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 4) {
-                    Button(action: startNewCategory) {
-                        Image(systemName: "plus")
+                    Spacer()
+                    Button(action: openSettings) {
+                        Image(systemName: "gearshape")
                     }
                     .buttonStyle(.borderless)
-                    .help("New category")
-                    Spacer()
-                    // Placeholder for the ⚙︎ Preferences control (Phase 5).
-                    Image(systemName: "gearshape").foregroundStyle(.tertiary)
+                    .help("Preferences")
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -436,6 +524,7 @@ struct ContentView: View {
             if editor.snippet != nil, let categoryID = selectedCategoryID {
                 SnippetEditor(
                     editor: editor,
+                    isReadOnly: selectedCategory?.isReadOnly ?? false,
                     onSave: { saveCurrent(categoryID: categoryID) },
                     onDelete: { deleteCurrent(categoryID: categoryID) })
             } else if selectedSnippetIDs.count > 1 {
@@ -460,13 +549,15 @@ struct ContentView: View {
             TextField("Name", text: $newCategoryName)
             Button("Create") {
                 // Unsaved changes were already resolved before this dialog opened.
-                if let id = store.addCategory(named: newCategoryName) {
+                if let sid = newCategorySourceID,
+                   let id = store.addCategory(named: newCategoryName, in: sid) {
                     applyCategory(id)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Creates a new match file in your espanso config.")
+            let name = store.sources.first { $0.id == newCategorySourceID }?.displayName
+            Text("Creates a new folder of snippets in \(name ?? "this source").")
         }
         .onChange(of: renameFieldFocused) { focused in
             // Blur commits the in-place rename (unless Esc already cancelled it).
@@ -521,12 +612,13 @@ struct SnippetRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 }
 
 struct SnippetEditor: View {
     @ObservedObject var editor: EditorModel
+    var isReadOnly: Bool = false
     let onSave: () -> Void
     let onDelete: () -> Void
     @State private var previewError: String?
@@ -535,6 +627,13 @@ struct SnippetEditor: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if isReadOnly {
+                    Label("Read-only — from a source you've marked read-only in Settings.",
+                          systemImage: "lock.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 2)
+                }
                 section("Label") {
                     TextField("Optional description", text: $editor.label)
                         .textFieldStyle(.roundedBorder)
@@ -543,7 +642,8 @@ struct SnippetEditor: View {
                     .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
                 section(triggerCount > 1 ? "Triggers" : "Trigger") {
                     Text("One per line").font(.system(size: 11)).foregroundStyle(.secondary)
-                    GrowingTextEditor(text: $editor.triggersText, minHeight: 54)
+                    GrowingTextEditor(text: $editor.triggersText, minHeight: 54,
+                                      isEditable: !isReadOnly)
                         .editorChrome()
                 }
                 optionalSections
@@ -553,6 +653,7 @@ struct SnippetEditor: View {
                 if editor.replaceEditable {
                     section("Replacement") {
                         GrowingTextEditor(text: $editor.replace, minHeight: 120,
+                                          isEditable: !isReadOnly,
                                           insertionTarget: insertionTarget)
                             .padding(6)
                             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
@@ -569,18 +670,24 @@ struct SnippetEditor: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .disabled(isReadOnly)
         }
         .navigationTitle(editor.snippet?.primaryText ?? "")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(role: .destructive, action: onDelete) {
-                    Label("Delete", systemImage: "trash")
+                if isReadOnly {
+                    Label("Read-only", systemImage: "lock.fill")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    Button(action: onSave) {
+                        Label("Save", systemImage: "checkmark")
+                    }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!editor.isDirty)
                 }
-                Button(action: onSave) {
-                    Label("Save", systemImage: "checkmark")
-                }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!editor.isDirty)
             }
         }
         .alert("Preview", isPresented: Binding(

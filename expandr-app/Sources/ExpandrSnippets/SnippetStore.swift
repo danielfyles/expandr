@@ -1,43 +1,182 @@
 import Foundation
 import Yams
 
-/// Loads espanso match files into categories/snippets. (Phase 0: read-only.)
+/// Loads espanso match files from the built-in match dir plus any additional
+/// (user-added) source folders, into categories/snippets grouped by source.
 @MainActor
 final class SnippetStore: ObservableObject {
     @Published var categories: [SnippetCategory] = []
+    @Published var sources: [SnippetSource] = []
+    @Published private(set) var additionalSources: [SnippetSource] = []
     @Published var loadError: String?
 
     let matchDir: URL?
+    private let defaultsKey = "additionalSources"
 
     init() {
         self.matchDir = EspansoPaths.matchDir()
+        additionalSources = Self.loadAdditionalSources()
+        // Reconcile the config's managed include block with the stored sources,
+        // in case it was lost (config regenerated) or is stale. The write is
+        // idempotent — nothing is touched when it already matches, so this
+        // doesn't needlessly trigger an espanso reload on every launch.
+        updateEspansoIncludes()
         load()
     }
 
-    func load() {
-        guard let matchDir else {
-            loadError = "Could not locate espanso's config directory."
-            return
-        }
-        let fm = FileManager.default
-        guard let files = try? matchFiles(in: matchDir, fm: fm) else {
-            loadError = "No match files found in \(matchDir.path)."
-            categories = []
-            return
-        }
+    // MARK: - Sources
 
-        var loaded: [SnippetCategory] = []
-        for url in files {
-            if let category = Self.parseFile(url) {
-                loaded.append(category)
-            }
-        }
-        categories = loaded.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        loadError = loaded.isEmpty ? "No snippet files yet in \(matchDir.path)." : nil
+    private static func loadAdditionalSources() -> [SnippetSource] {
+        guard let data = UserDefaults.standard.data(forKey: "additionalSources"),
+              let decoded = try? JSONDecoder().decode([SnippetSource].self, from: data)
+        else { return [] }
+        return decoded
     }
 
-    /// Top-level `.yml`/`.yaml` files under `match/`, excluding the `packages`
-    /// dir (packages are managed separately) for now.
+    private func persistSources() {
+        if let data = try? JSONEncoder().encode(additionalSources) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+        }
+        updateEspansoIncludes()
+    }
+
+    /// The built-in source = espanso's own match dir.
+    private var builtInSource: SnippetSource? {
+        matchDir.map {
+            SnippetSource(id: SnippetSource.builtInID, path: $0.path, isReadOnly: false, isBuiltIn: true)
+        }
+    }
+
+    /// Add a folder as a source. If it already holds YAML files, just use them;
+    /// otherwise seed one default file named after the folder. Returns it.
+    @discardableResult
+    func addSource(_ url: URL, readOnly: Bool = false) -> SnippetSource? {
+        let standardized = url.standardizedFileURL
+        guard !additionalSources.contains(where: { $0.url.standardizedFileURL == standardized }),
+              standardized.standardizedFileURL != matchDir?.standardizedFileURL
+        else { return nil }
+
+        let fm = FileManager.default
+        let existing = (try? matchFiles(in: url, fm: fm)) ?? []
+        if existing.isEmpty {
+            let seed = url.appendingPathComponent("\(url.lastPathComponent).yml")
+            try? "matches: []\n".write(to: seed, atomically: true, encoding: .utf8)
+        }
+        let source = SnippetSource(id: UUID(), path: url.path, isReadOnly: readOnly, isBuiltIn: false)
+        additionalSources.append(source)
+        persistSources()
+        load()
+        return source
+    }
+
+    func removeSource(_ id: UUID) {
+        additionalSources.removeAll { $0.id == id }
+        persistSources()
+        load()
+    }
+
+    func setSourceReadOnly(_ id: UUID, _ readOnly: Bool) {
+        guard let i = additionalSources.firstIndex(where: { $0.id == id }) else { return }
+        additionalSources[i].isReadOnly = readOnly
+        persistSources()
+        load()
+    }
+
+    // Markers delimiting the block we manage in `config/default.yml`, so we can
+    // rewrite our settings without disturbing the user's comments/other settings.
+    private static let includeMarkerStart = "# >>> Expandr managed sources — do not edit >>>"
+    private static let includeMarkerEnd = "# <<< Expandr managed sources <<<"
+
+    /// Reconcile our managed block in espanso's config. It holds the settings
+    /// Expandr owns — silencing espanso's reload notifications (Expandr writes the
+    /// files espanso watches often, so its default per-reload toast is just noise)
+    /// — plus the additional-source include globs when there are any. Only our own
+    /// delimited block is touched; everything else in the file is preserved.
+    /// espanso auto-reloads config changes by default, so no explicit restart is
+    /// needed for these to take effect.
+    private func updateEspansoIncludes() {
+        guard let configDir = EspansoPaths.configDir() else { return }
+        let defaultYml = configDir.appendingPathComponent("config/default.yml")
+        var text = (try? String(contentsOf: defaultYml, encoding: .utf8)) ?? ""
+
+        // Strip any previously managed block (markers inclusive).
+        if let range = managedBlockRange(in: text) {
+            text.removeSubrange(range)
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        }
+
+        // The block is always present once Expandr has run: it silences the
+        // reload notifications, and carries the include globs when sources exist.
+        var block = "\n\(Self.includeMarkerStart)\n"
+        block += "show_notifications: false\n"
+        let globs = additionalSources.map { "\($0.url.path)/*.yml" }
+        if !globs.isEmpty {
+            block += "extra_includes:\n"
+            for glob in globs { block += "  - \(yamlQuoted(glob))\n" }
+        }
+        block += "\(Self.includeMarkerEnd)\n"
+        if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
+        text += block
+
+        // Idempotent: only write when the file would actually change, so a
+        // launch-time reconcile doesn't churn the config (and espanso's watcher).
+        let current = (try? String(contentsOf: defaultYml, encoding: .utf8))
+        if current != text {
+            try? text.write(to: defaultYml, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// The character range of our managed block (start marker through end marker,
+    /// inclusive of trailing newline), or nil if absent.
+    private func managedBlockRange(in text: String) -> Range<String.Index>? {
+        guard let start = text.range(of: Self.includeMarkerStart),
+              let end = text.range(of: Self.includeMarkerEnd, range: start.upperBound..<text.endIndex)
+        else { return nil }
+        // Extend the end to swallow the rest of the marker's line.
+        let lineEnd = text[end.upperBound...].firstIndex(where: \.isNewline)
+        let upper = lineEnd.map { text.index(after: $0) } ?? text.endIndex
+        return start.lowerBound..<upper
+    }
+
+    /// Double-quote a YAML scalar, escaping backslashes and quotes.
+    private func yamlQuoted(_ s: String) -> String {
+        "\"" + s.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    // MARK: - Loading
+
+    func load() {
+        var loadedSources: [SnippetSource] = []
+        var allCategories: [SnippetCategory] = []
+        let fm = FileManager.default
+
+        if let builtIn = builtInSource {
+            loadedSources.append(builtIn)
+            allCategories += categories(in: builtIn.url, source: builtIn, fm: fm)
+        }
+        for source in additionalSources {
+            loadedSources.append(source)
+            allCategories += categories(in: source.url, source: source, fm: fm)
+        }
+
+        sources = loadedSources
+        categories = allCategories
+        loadError = (matchDir == nil) ? "Could not locate espanso's config directory." : nil
+    }
+
+    private func categories(in dir: URL, source: SnippetSource, fm: FileManager) -> [SnippetCategory] {
+        guard let files = try? matchFiles(in: dir, fm: fm) else { return [] }
+        return files.compactMap { url -> SnippetCategory? in
+            guard var category = Self.parseFile(url) else { return nil }
+            category.sourceID = source.id
+            category.isReadOnly = source.isReadOnly
+            return category
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Top-level `.yml`/`.yaml` files in a directory (packages excluded for now).
     private func matchFiles(in dir: URL, fm: FileManager) throws -> [URL] {
         let entries = try fm.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
@@ -71,7 +210,8 @@ final class SnippetStore: ObservableObject {
     /// the UI can select it for editing.
     @discardableResult
     func addSnippet(toCategory categoryID: SnippetCategory.ID) -> Snippet.ID? {
-        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return nil }
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }),
+              !categories[ci].isReadOnly else { return nil }
         let snippet = Snippet(
             label: nil, triggers: [":new"], regex: nil, replace: "",
             kind: .replace, vars: [], raw: [:])
@@ -80,31 +220,37 @@ final class SnippetStore: ObservableObject {
         return snippet.id
     }
 
-    /// Create a new match file (category). Returns its id, or nil on failure.
+    /// Create a new match file (category) in the given source's folder. Returns
+    /// its id, or nil on failure.
     @discardableResult
-    func addCategory(named rawName: String) -> SnippetCategory.ID? {
-        guard let matchDir else { loadError = "No config directory."; return nil }
-        let url = uniqueURL(for: sanitizedFileName(rawName), ext: "yml", in: matchDir)
+    func addCategory(named rawName: String, in sourceID: UUID) -> SnippetCategory.ID? {
+        guard let source = sources.first(where: { $0.id == sourceID }) else {
+            loadError = "Unknown source."; return nil
+        }
+        guard !source.isReadOnly else { loadError = "That source is read-only."; return nil }
+        let url = uniqueURL(for: sanitizedFileName(rawName), ext: "yml", in: source.url)
         do {
             try "matches: []\n".write(to: url, atomically: true, encoding: .utf8)
         } catch {
             loadError = "Couldn't create category: \(error.localizedDescription)"
             return nil
         }
-        let category = SnippetCategory(url: url, snippets: [], rawTop: [:])
-        categories.append(category)
-        sortCategories()
-        return category.id
+        // Reload from disk so the new file is picked up and tagged to the right
+        // source (a manual append into one section's filtered list doesn't
+        // reliably re-render). Return the reloaded category's id for selection.
+        load()
+        return categories.first { $0.url.standardizedFileURL == url.standardizedFileURL }?.id
     }
 
     /// Rename a category by moving its file. No-op if the name is unchanged.
     func renameCategory(_ categoryID: SnippetCategory.ID, to newName: String) {
         guard let ci = categories.firstIndex(where: { $0.id == categoryID }),
-              let matchDir else { return }
+              !categories[ci].isReadOnly else { return }
+        let dir = categories[ci].url.deletingLastPathComponent()
         let ext = categories[ci].url.pathExtension.isEmpty ? "yml" : categories[ci].url.pathExtension
         let base = sanitizedFileName(newName)
         if base == categories[ci].url.deletingPathExtension().lastPathComponent { return }
-        let url = uniqueURL(for: base, ext: ext, in: matchDir)
+        let url = uniqueURL(for: base, ext: ext, in: dir)
         do {
             try FileManager.default.moveItem(at: categories[ci].url, to: url)
         } catch {
@@ -117,7 +263,8 @@ final class SnippetStore: ObservableObject {
 
     /// Delete a category by moving its file to the Trash (recoverable).
     func deleteCategory(_ categoryID: SnippetCategory.ID) {
-        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }),
+              !categories[ci].isReadOnly else { return }
         do {
             try FileManager.default.trashItem(at: categories[ci].url, resultingItemURL: nil)
         } catch {
@@ -156,7 +303,8 @@ final class SnippetStore: ObservableObject {
 
     /// Replace a snippet in its category and write the file back to disk.
     func save(_ snippet: Snippet, inCategory categoryID: SnippetCategory.ID) {
-        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }),
+              !categories[ci].isReadOnly else { return }
         if let si = categories[ci].snippets.firstIndex(where: { $0.id == snippet.id }) {
             categories[ci].snippets[si] = snippet
         }
@@ -165,7 +313,8 @@ final class SnippetStore: ObservableObject {
 
     /// Remove a snippet and write the file back.
     func deleteSnippet(_ snippetID: Snippet.ID, inCategory categoryID: SnippetCategory.ID) {
-        guard let ci = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+        guard let ci = categories.firstIndex(where: { $0.id == categoryID }),
+              !categories[ci].isReadOnly else { return }
         categories[ci].snippets.removeAll { $0.id == snippetID }
         writeFile(categories[ci])
     }
@@ -180,6 +329,7 @@ final class SnippetStore: ObservableObject {
                   $0.snippets.contains { $0.id == snippetID }
               }),
               srcCI != targetCI,
+              !categories[srcCI].isReadOnly, !categories[targetCI].isReadOnly,
               let si = categories[srcCI].snippets.firstIndex(where: { $0.id == snippetID })
         else { return false }
 

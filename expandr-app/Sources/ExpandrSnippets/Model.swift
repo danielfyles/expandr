@@ -127,11 +127,31 @@ struct SnippetVar: Identifiable {
     }
 }
 
+/// A source of snippet files: a folder of YAML match files. The built-in source
+/// is espanso's own `match/` dir; additional sources are user-added folders
+/// (e.g. a shared drive) and can be marked read-only.
+struct SnippetSource: Identifiable, Codable, Hashable {
+    var id: UUID
+    var path: String
+    var isReadOnly: Bool
+    var isBuiltIn: Bool
+
+    /// Fixed id for the built-in (espanso match dir) source.
+    static let builtInID = UUID(uuidString: "00000000-0000-0000-0000-0000000E5A50")!
+
+    var url: URL { URL(fileURLWithPath: path) }
+    var displayName: String { isBuiltIn ? "My Snippets" : url.lastPathComponent }
+}
+
 /// One match file (`match/<name>.yml`) — maps to a category in the sidebar.
 struct SnippetCategory: Identifiable, Hashable {
     let id = UUID()
     var url: URL
     var snippets: [Snippet]
+
+    /// Which source this file belongs to, and whether it's read-only.
+    var sourceID: UUID = SnippetSource.builtInID
+    var isReadOnly: Bool = false
 
     /// The file's other top-level keys (`imports`, `global_vars`) preserved for
     /// round-tripping.
