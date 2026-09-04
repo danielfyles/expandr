@@ -763,10 +763,28 @@ struct VariableRow: View {
             labeled("Args (one per line)") {
                 GrowingTextEditor(text: listParam("args"), minHeight: 60).editorChrome()
             }
+        case "choice":
+            if choiceHasLabelledValues {
+                Text("This choice uses labelled options (label/id) — preserved as-is; edit the file directly to change them.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                labeled("Options (one per line)") {
+                    GrowingTextEditor(text: listParam("values"), minHeight: 60).editorChrome()
+                }
+                Text("A pick-list appears when the trigger is typed; the chosen option is inserted.")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            }
         default:
             Text("Editing \(variable.type) parameters isn't supported yet — preserved as-is.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    /// True if a choice var's values include label/id objects (not plain
+    /// strings), which the simple options editor shouldn't clobber.
+    private var choiceHasLabelledValues: Bool {
+        guard let values = variable.params["values"] as? [Any] else { return false }
+        return values.contains { !($0 is String) }
     }
 
     private func strParam(_ key: String) -> Binding<String> {
