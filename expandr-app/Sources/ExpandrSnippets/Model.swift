@@ -85,6 +85,21 @@ struct SnippetVar: Identifiable {
     static let knownTypes = [
         "date", "shell", "script", "clipboard", "random", "choice",
     ]
+
+    /// SF Symbol for a variable type, shown in the type picker.
+    static func symbol(for type: String) -> String {
+        switch type {
+        case "date": return "calendar"
+        case "shell": return "terminal"
+        case "script": return "chevron.left.forwardslash.chevron.right"
+        case "clipboard": return "doc.on.clipboard"
+        case "random": return "die.face.4"
+        case "choice": return "list.bullet"
+        case "echo": return "text.quote"
+        case "form": return "rectangle.and.pencil.and.ellipsis"
+        default: return "curlybraces"
+        }
+    }
 }
 
 /// One match file (`match/<name>.yml`) — maps to a category in the sidebar.

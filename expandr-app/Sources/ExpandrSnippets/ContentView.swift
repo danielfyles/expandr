@@ -617,19 +617,21 @@ struct VariableRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                TextField("name", text: $variable.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
                 Picker("", selection: $variable.type) {
                     // Keep the current type selectable even if it's not offered
                     // (e.g. a legacy `echo` var), so it isn't silently changed.
                     let types = SnippetVar.knownTypes.contains(variable.type)
                         ? SnippetVar.knownTypes
                         : [variable.type] + SnippetVar.knownTypes
-                    ForEach(types, id: \.self) { Text($0).tag($0) }
+                    ForEach(types, id: \.self) { type in
+                        Label(type, systemImage: SnippetVar.symbol(for: type)).tag(type)
+                    }
                 }
                 .labelsHidden()
                 .frame(width: 130)
+                TextField("name", text: $variable.name)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
                 Spacer()
                 Button(action: onInsert) { Image(systemName: "arrow.down.square") }
                     .buttonStyle(.borderless)
@@ -652,7 +654,9 @@ struct VariableRow: View {
         case "echo":
             labeled("Text") { TextField("text to insert", text: strParam("echo")).textFieldStyle(.roundedBorder) }
         case "shell":
-            labeled("Command") { TextField("echo \"hello\"", text: strParam("cmd")).textFieldStyle(.roundedBorder) }
+            labeled("Command") {
+                GrowingTextEditor(text: strParam("cmd"), minHeight: 54).editorChrome()
+            }
         case "clipboard":
             Text("Inserts the current clipboard contents.").font(.caption).foregroundStyle(.secondary)
         case "random":
