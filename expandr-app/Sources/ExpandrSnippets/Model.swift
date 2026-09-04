@@ -83,7 +83,7 @@ struct SnippetVar: Identifiable {
     /// would just be filtered out of the Variables list) are intentionally
     /// omitted — both are still parsed/edited if an existing var uses them.
     static let knownTypes = [
-        "date", "shell", "script", "clipboard", "random", "choice", "match",
+        "date", "shell", "script", "clipboard", "random", "choice",
     ]
 }
 
