@@ -617,7 +617,17 @@ struct VariableRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Picker("", selection: $variable.type) {
+                Picker("", selection: Binding(
+                    get: { variable.type },
+                    set: { newType in
+                        // Changing type starts the new type's params fresh, so a
+                        // previous type's params (e.g. shell `cmd`) don't linger
+                        // invisibly or get written to the file.
+                        guard newType != variable.type else { return }
+                        variable.type = newType
+                        variable.params = [:]
+                    })
+                ) {
                     // Keep the current type selectable even if it's not offered
                     // (e.g. a legacy `echo` var), so it isn't silently changed.
                     let types = SnippetVar.knownTypes.contains(variable.type)
@@ -655,7 +665,9 @@ struct VariableRow: View {
             labeled("Text") { TextField("text to insert", text: strParam("echo")).textFieldStyle(.roundedBorder) }
         case "shell":
             labeled("Command") {
-                GrowingTextEditor(text: strParam("cmd"), minHeight: 54).editorChrome()
+                GrowingTextEditor(
+                    text: strParam("cmd"), minHeight: 54,
+                    placeholder: "echo \"Look ma, no typing!\"").editorChrome()
             }
         case "clipboard":
             Text("Inserts the current clipboard contents.").font(.caption).foregroundStyle(.secondary)

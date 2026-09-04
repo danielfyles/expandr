@@ -8,12 +8,14 @@ import AppKit
 struct GrowingTextEditor: NSViewRepresentable {
     @Binding var text: String
     var minHeight: CGFloat = 54
+    var placeholder: String = ""
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> GrowingNSTextView {
         let view = GrowingNSTextView()
         view.minHeightConstant = minHeight
+        view.placeholder = placeholder
         view.delegate = context.coordinator
         view.isRichText = false
         view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -30,8 +32,10 @@ struct GrowingTextEditor: NSViewRepresentable {
 
     func updateNSView(_ view: GrowingNSTextView, context: Context) {
         view.minHeightConstant = minHeight
+        view.placeholder = placeholder
         if view.string != text { view.string = text }
         view.invalidateIntrinsicContentSize()
+        view.needsDisplay = true  // refresh the placeholder as the text empties/fills
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -47,6 +51,21 @@ struct GrowingTextEditor: NSViewRepresentable {
 
 final class GrowingNSTextView: NSTextView {
     var minHeightConstant: CGFloat = 54
+    var placeholder: String = ""
+
+    // Draw placeholder text when empty (NSTextView has no built-in placeholder).
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, !placeholder.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.placeholderTextColor,
+            .font: font ?? NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+        ]
+        let origin = NSPoint(
+            x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0),
+            y: textContainerInset.height)
+        placeholder.draw(at: origin, withAttributes: attributes)
+    }
 
     override var intrinsicContentSize: NSSize {
         guard let layoutManager, let textContainer else {
