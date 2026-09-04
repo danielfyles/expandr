@@ -3,7 +3,7 @@ import Foundation
 /// A form field in the designer. espanso stores forms as a `type: form` variable
 /// whose `params` hold a `layout` template and a `fields` mapping; we present that
 /// as an ordered list of these, and (de)serialise between the two.
-struct FormFieldSpec: Identifiable {
+struct FormFieldSpec: Identifiable, Equatable {
     let id = UUID()
     var label: String            // display label (the text before [[name]] in the layout)
     var name: String             // the {{form.<name>}} key
@@ -11,7 +11,7 @@ struct FormFieldSpec: Identifiable {
     var defaultValue: String
     var values: [String]         // choice / list options
 
-    enum Kind: String, CaseIterable, Identifiable {
+    enum Kind: String, CaseIterable, Identifiable, Equatable {
         case text, multiline, choice, list
         var id: String { rawValue }
         var title: String {
