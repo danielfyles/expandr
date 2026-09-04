@@ -19,6 +19,10 @@ struct ContentView: View {
     @StateObject private var editor = EditorModel()
     @State private var pendingNav: PendingNav?
 
+    // Snippet search (matches trigger + replacement); ⌘F focuses the field.
+    @State private var snippetSearch = ""
+    @FocusState private var searchFocused: Bool
+
     // Remember the last-selected category (by name — ids are regenerated each
     // load) across launches; the snippet selection is intentionally not restored.
     @AppStorage("lastCategoryName") private var lastCategoryName = ""
@@ -82,9 +86,13 @@ struct ContentView: View {
 
     private func applySnippets(_ new: Set<Snippet.ID>) {
         selectedSnippetIDs = new
+        // Resolve across all categories so a global search result loads from —
+        // and saves back to — its own folder.
         if new.count == 1, let id = new.first,
-           let snip = selectedCategory?.snippets.first(where: { $0.id == id }) {
-            editor.load(snip)
+           let category = store.categories.first(where: { $0.snippets.contains { $0.id == id } }),
+           let snippet = category.snippets.first(where: { $0.id == id }) {
+            selectedCategoryID = category.id
+            editor.load(snippet)
         } else {
             editor.clear()
         }
@@ -101,6 +109,7 @@ struct ContentView: View {
     private func applyCategory(_ id: SnippetCategory.ID?) {
         selectedCategoryID = id
         selectedSnippetIDs = []
+        snippetSearch = ""
         editor.clear()
         if let category = store.categories.first(where: { $0.id == id }) {
             lastCategoryName = category.name
@@ -259,6 +268,108 @@ struct ContentView: View {
         }
     }
 
+    private var isSearching: Bool {
+        !snippetSearch.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Does a snippet match the query (trigger or replacement, case-insensitive)?
+    private func matches(_ snippet: Snippet, _ query: String) -> Bool {
+        snippet.triggers.contains { $0.lowercased().contains(query) }
+            || (snippet.replace?.lowercased().contains(query) ?? false)
+    }
+
+    /// Matching snippets across ALL categories, with their owning category.
+    private var globalSearchResults: [(snippet: Snippet, category: SnippetCategory)] {
+        let query = snippetSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return [] }
+        return store.categories.flatMap { category in
+            category.snippets.filter { matches($0, query) }
+                .map { (snippet: $0, category: category) }
+        }
+    }
+
+    /// The normal list of a category's snippets (with drag, delete, New Snippet).
+    @ViewBuilder private func categorySnippetsList(_ category: SnippetCategory) -> some View {
+        List(selection: Binding(get: { selectedSnippetIDs }, set: { requestSnippets($0) })) {
+            ForEach(category.snippets) { snippet in
+                SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
+                    .tag(snippet.id)
+                    .draggable(dragPayload(for: snippet.id, in: category))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteSnippetRow(snippet, in: category)
+                        } label: { Label("Delete", systemImage: "trash") }
+                    }
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            deleteSnippetRow(snippet, in: category)
+                        }
+                    }
+            }
+            newSnippetPlaceholder(category)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(
+                        Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                        .padding(.top, 10)
+                        .padding(.horizontal, 10))
+        }
+    }
+
+    /// Flat list of global search results; each row shows its category.
+    @ViewBuilder private var searchResultsList: some View {
+        let results = globalSearchResults
+        if results.isEmpty {
+            ContentUnavailableCompat("No matches", systemImage: "magnifyingglass",
+                                     message: "No snippet's trigger or replacement contains “\(snippetSearch)”.")
+        } else {
+            List(selection: Binding(get: { selectedSnippetIDs }, set: { requestSnippets($0) })) {
+                ForEach(results, id: \.snippet.id) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        SnippetRow(primary: item.snippet.listTitle, preview: item.snippet.listSubtitle)
+                        Text(item.category.name).font(.system(size: 10)).foregroundStyle(.tertiary)
+                    }
+                    .tag(item.snippet.id)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteSnippetRow(item.snippet, in: item.category)
+                        } label: { Label("Delete", systemImage: "trash") }
+                    }
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            deleteSnippetRow(item.snippet, in: item.category)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The always-visible search field pinned above the snippet list.
+    private var snippetSearchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search snippets", text: $snippetSearch)
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+                .onExitCommand { snippetSearch = ""; searchFocused = false }
+            if !snippetSearch.isEmpty {
+                Button { snippetSearch = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+    }
+
     /// In-place rename field. Opaque background so the row's selection highlight
     /// doesn't bleed through and wash out the text.
     private var renameField: some View {
@@ -277,13 +388,16 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             // ---- Left: categories (files) ----
-            List(selection: Binding(get: { selectedCategoryID }, set: { requestCategory($0) })) {
+            // While searching, drop the selection highlight and dim the sidebar.
+            List(selection: Binding(get: { isSearching ? nil : selectedCategoryID },
+                                    set: { requestCategory($0) })) {
                 Section("Categories") {
                     ForEach(store.categories) { category in
                         categoryRow(category)
                     }
                 }
             }
+            .opacity(isSearching ? 0.45 : 1)
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 4) {
@@ -300,41 +414,23 @@ struct ContentView: View {
                 .padding(.vertical, 6)
             }
         } content: {
-            // ---- Middle: snippets in the selected category ----
-            if let category = selectedCategory {
-                List(selection: Binding(get: { selectedSnippetIDs }, set: { requestSnippets($0) })) {
-                    ForEach(category.snippets) { snippet in
-                        SnippetRow(primary: snippet.listTitle, preview: snippet.listSubtitle)
-                            .tag(snippet.id)
-                            .draggable(dragPayload(for: snippet.id, in: category))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    deleteSnippetRow(snippet, in: category)
-                                } label: { Label("Delete", systemImage: "trash") }
-                            }
-                            .contextMenu {
-                                Button("Delete", role: .destructive) {
-                                    deleteSnippetRow(snippet, in: category)
-                                }
-                            }
+            // ---- Middle: snippets (a category's, or global search results) ----
+            // The search field is a stable sibling (not a safeAreaInset on the
+            // switching list) so it keeps focus when the list swaps to results.
+            VStack(spacing: 0) {
+                snippetSearchField
+                Group {
+                    if isSearching {
+                        searchResultsList
+                    } else if let category = selectedCategory {
+                        categorySnippetsList(category)
+                    } else {
+                        ContentUnavailableCompat("Select a category", systemImage: "folder")
                     }
-                    // Sits directly below the last snippet and scrolls with them.
-                    // The dashed border is the row background, so it lines up with
-                    // the selection highlight's rounded rect exactly.
-                    newSnippetPlaceholder(category)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 8).strokeBorder(
-                                Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                                .padding(.top, 10)
-                                .padding(.horizontal, 10))
                 }
-                .navigationTitle(category.name)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 300)
-            } else {
-                ContentUnavailableCompat("Select a category", systemImage: "folder")
             }
+            .navigationTitle(isSearching ? "" : (selectedCategory?.name ?? ""))
+            .navigationSplitViewColumnWidth(min: 240, ideal: 300)
         } detail: {
             // ---- Right: snippet editor ----
             if editor.snippet != nil, let categoryID = selectedCategoryID {
@@ -398,6 +494,13 @@ struct ContentView: View {
             }
         }
         .onAppear { restoreCategorySelection() }
+        .background {
+            // ⌘F focuses the snippet search field.
+            Button("") { searchFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
     }
 }
 
