@@ -263,7 +263,20 @@ final class SnippetStore: ObservableObject {
         var d = v.raw
         d["name"] = v.name
         d["type"] = v.type
-        if v.params.isEmpty { d.removeValue(forKey: "params") } else { d["params"] = v.params }
+
+        // Drop blank entries from string-array params (e.g. trailing/blank lines
+        // left while editing script args or random choices). Nested dicts (a
+        // form's `fields`) are left untouched.
+        var params = v.params
+        for (key, value) in params {
+            guard let array = value as? [Any] else { continue }
+            let strings = array.compactMap { $0 as? String }
+            guard strings.count == array.count else { continue }  // only pure string arrays
+            let cleaned = strings.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            if cleaned.isEmpty { params.removeValue(forKey: key) } else { params[key] = cleaned }
+        }
+
+        if params.isEmpty { d.removeValue(forKey: "params") } else { d["params"] = params }
         return d
     }
 }

@@ -71,8 +71,7 @@ struct FormFieldRow: View {
 
             if field.kind == .choice || field.kind == .list {
                 labeledBlock("Options (one per line)") {
-                    TextEditor(text: valuesBinding)
-                        .font(.body.monospaced()).frame(height: 64).editorChrome()
+                    GrowingTextEditor(text: valuesBinding, minHeight: 64).editorChrome()
                 }
             }
             labeledBlock("Default (optional)") {

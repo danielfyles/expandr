@@ -78,11 +78,12 @@ struct SnippetVar: Identifiable {
     var params: [String: Any]
     var raw: [String: Any]
 
-    /// Variable types offered in the picker, in a sensible order. (`echo`, a
-    /// static value, is intentionally omitted — it's still parsed/edited if an
-    /// existing var uses it, just not offered as a new choice.)
+    /// Variable types offered in the picker, in a sensible order. `echo` (a
+    /// static value) and `form` (managed by the dedicated Form designer, so it
+    /// would just be filtered out of the Variables list) are intentionally
+    /// omitted — both are still parsed/edited if an existing var uses them.
     static let knownTypes = [
-        "date", "shell", "script", "clipboard", "random", "choice", "form", "match",
+        "date", "shell", "script", "clipboard", "random", "choice", "match",
     ]
 }
 

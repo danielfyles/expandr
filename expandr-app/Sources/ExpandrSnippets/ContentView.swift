@@ -437,9 +437,7 @@ struct SnippetEditor: View {
                 }
                 section("Triggers") {
                     Text("One per line").font(.system(size: 11)).foregroundStyle(.secondary)
-                    TextEditor(text: $editor.triggersText)
-                        .font(.body.monospaced())
-                        .frame(minHeight: 54)
+                    GrowingTextEditor(text: $editor.triggersText, minHeight: 54)
                         .editorChrome()
                 }
                 section("Form") {
@@ -472,9 +470,7 @@ struct SnippetEditor: View {
                 // fields and variables into the final output.
                 if editor.replaceEditable {
                     section("Replacement") {
-                        TextEditor(text: $editor.replace)
-                            .font(.body.monospaced())
-                            .frame(minHeight: 160)
+                        GrowingTextEditor(text: $editor.replace, minHeight: 120)
                             .padding(6)
                             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12)
@@ -661,11 +657,11 @@ struct VariableRow: View {
             Text("Inserts the current clipboard contents.").font(.caption).foregroundStyle(.secondary)
         case "random":
             labeled("Choices (one per line)") {
-                TextEditor(text: listParam("choices")).font(.body.monospaced()).frame(height: 60).editorChrome()
+                GrowingTextEditor(text: listParam("choices"), minHeight: 60).editorChrome()
             }
         case "script":
             labeled("Args (one per line)") {
-                TextEditor(text: listParam("args")).font(.body.monospaced()).frame(height: 60).editorChrome()
+                GrowingTextEditor(text: listParam("args"), minHeight: 60).editorChrome()
             }
         default:
             Text("Editing \(variable.type) parameters isn't supported yet — preserved as-is.")
@@ -684,9 +680,9 @@ struct VariableRow: View {
         Binding(
             get: { (variable.params[key] as? [Any])?.compactMap { $0 as? String }.joined(separator: "\n") ?? "" },
             set: {
-                let items = $0.split(whereSeparator: \.isNewline)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                variable.params[key] = items.isEmpty ? nil : items
+                // Lossless split/join so newlines (incl. trailing/blank) survive
+                // while typing; empty entries are cleaned up when the file is saved.
+                variable.params[key] = $0.components(separatedBy: "\n")
             }
         )
     }
