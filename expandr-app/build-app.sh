@@ -31,6 +31,12 @@ mkdir -p "$APP/Contents/Resources/Fonts"
 cp "$REPO/espanso-ui/fonts/Fraunces.ttf"  "$APP/Contents/Resources/Fonts/"
 cp "$REPO/espanso-ui/fonts/Newsreader.ttf" "$APP/Contents/Resources/Fonts/"
 
+# Optional help image shown in the "folder might be offline" modal (Settings).
+# Drop a PNG at expandr-app/Resources/offline-fix.png and it gets bundled.
+if [ -f "$HERE/Resources/offline-fix.png" ]; then
+  cp "$HERE/Resources/offline-fix.png" "$APP/Contents/Resources/offline-fix.png"
+fi
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -16,6 +16,9 @@ struct ContentView: View {
     @FocusState private var renameFieldFocused: Bool
     @State private var deletingCategoryID: SnippetCategory.ID?
     @State private var lastCategoryClickAt: Date?
+    // The source whose "not downloaded" explanation modal is open (from a
+    // sidebar warning ⚠️).
+    @State private var offlineInfoSource: SnippetSource?
 
     // The lifted editor state + a pending navigation held back by unsaved changes.
     @StateObject private var editor = EditorModel()
@@ -248,6 +251,26 @@ struct ContentView: View {
         Group {
             if renamingCategoryID == category.id {
                 renameField
+            } else if category.isOnlineOnly {
+                // Online-only cloud file: a red warning in place of the count.
+                HStack(spacing: 4) {
+                    Label {
+                        Text(category.name).font(BrandFont.heading(14, weight: 540))
+                    } icon: {
+                        Image(systemName: "folder")
+                    }
+                    Spacer()
+                    Button {
+                        offlineInfoSource = store.sources.first { $0.id == category.sourceID }
+                    } label: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Not downloaded — click to learn more")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { handleCategoryClick(category) }
             } else {
                 // One count-1 tap fires instantly (no double-click disambiguation
                 // lag): it selects, and a second click on the already-selected row
@@ -292,6 +315,11 @@ struct ContentView: View {
         }
     }
 
+    /// The categories belonging to one source, in the order the store holds them.
+    private func categoryRows(for source: SnippetSource) -> [SnippetCategory] {
+        store.categories.filter { $0.sourceID == source.id }
+    }
+
     /// A sidebar section header: the source's name, a lock if read-only, and a
     /// "+" to create a new category in that source (hidden when read-only).
     @ViewBuilder private func sourceHeader(_ source: SnippetSource) -> some View {
@@ -325,6 +353,7 @@ struct ContentView: View {
         }
         for c in store.categories {
             hasher.combine(c.id); hasher.combine(c.sourceID); hasher.combine(c.name)
+            hasher.combine(c.isOnlineOnly)
         }
         return hasher.finalize()
     }
@@ -474,7 +503,7 @@ struct ContentView: View {
                                     set: { requestCategory($0) })) {
                 ForEach(store.sources) { source in
                     Section {
-                        ForEach(store.categories.filter { $0.sourceID == source.id }) { category in
+                        ForEach(categoryRows(for: source)) { category in
                             categoryRow(category)
                         }
                     } header: {
@@ -510,6 +539,10 @@ struct ContentView: View {
                 Group {
                     if isSearching {
                         searchResultsList
+                    } else if let category = selectedCategory, category.isOnlineOnly {
+                        ContentUnavailableCompat(
+                            "Not downloaded", systemImage: "exclamationmark.triangle",
+                            message: "This folder is stored in the cloud and isn't available offline yet, so its snippets aren't loaded. Make the folder available offline to use them.")
                     } else if let category = selectedCategory {
                         categorySnippetsList(category)
                     } else {
@@ -585,6 +618,15 @@ struct ContentView: View {
             }
         }
         .onAppear { restoreCategorySelection() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Coming back from Finder (e.g. after making a folder available
+            // offline) re-checks online-only state and reloads if it changed.
+            store.revalidateAvailability()
+        }
+        .sheet(item: $offlineInfoSource) { source in
+            OfflineWarningView(source: source) { offlineInfoSource = nil }
+        }
         .background {
             // ⌘F focuses the snippet search field.
             Button("") { searchFocused = true }

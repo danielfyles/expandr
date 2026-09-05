@@ -153,6 +153,11 @@ struct SnippetCategory: Identifiable, Hashable {
     var sourceID: UUID = SnippetSource.builtInID
     var isReadOnly: Bool = false
 
+    /// True if the backing file is an online-only cloud placeholder (not
+    /// downloaded). We deliberately don't read it — that would force a download —
+    /// so its snippets aren't loaded and it's flagged for a warning instead.
+    var isOnlineOnly: Bool = false
+
     /// The file's other top-level keys (`imports`, `global_vars`) preserved for
     /// round-tripping.
     var rawTop: [String: Any]

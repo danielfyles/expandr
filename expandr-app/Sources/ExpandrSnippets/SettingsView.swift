@@ -7,6 +7,8 @@ import AppKit
 struct SettingsView: View {
     @ObservedObject var store: SnippetStore
     @State private var removing: SnippetSource?
+    // The source whose "online-only" explanation modal is currently open.
+    @State private var explaining: SnippetSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -43,6 +45,10 @@ struct SettingsView: View {
         } message: {
             Text("Expandr will stop reading from this folder. The folder and its files are left untouched.")
         }
+        .sheet(item: $explaining) { source in
+            OfflineWarningView(source: source) { explaining = nil }
+        }
+        .onAppear { store.revalidateAvailability() }
     }
 
     private var header: some View {
@@ -71,6 +77,15 @@ struct SettingsView: View {
             if source.isBuiltIn {
                 Text("Built-in").font(.caption).foregroundStyle(.tertiary)
             } else {
+                // Cloud folder with online-only files → warn (click for details).
+                if sourceMayBeUnavailable(source) {
+                    Button { explaining = source } label: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("This folder may not always be available — click to learn more")
+                }
                 // A padlock: click to lock (read-only) or unlock (editable). The
                 // "Read-only" wording only appears once it's locked — a closed
                 // padlock reads as read-only on its own.
@@ -112,6 +127,70 @@ struct SettingsView: View {
         panel.message = "Choose a folder containing (or to contain) snippet files in YAML format."
         if panel.runModal() == .OK, let url = panel.url {
             store.addSource(url)
+        }
+    }
+
+    /// True if any of the source's files is online-only (not downloaded). The
+    /// store flags these during load (via a metadata-only stat, without
+    /// materializing them), so this just reads that flag.
+    private func sourceMayBeUnavailable(_ source: SnippetSource) -> Bool {
+        store.categories.contains { $0.sourceID == source.id && $0.isOnlineOnly }
+    }
+}
+
+/// Explains the cloud-folder "online-only" problem and how to fix it. The fix
+/// screenshot is bundled as `offline-fix.png` when present.
+struct OfflineWarningView: View {
+    let source: SnippetSource
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title).foregroundStyle(.red)
+                Text("This folder might not always be available")
+                    .font(.title3.weight(.semibold))
+            }
+            Text("“\(source.displayName)” is stored in a cloud folder (Google Drive or similar). Some of its snippet files are kept online-only and downloaded on demand.\n\nWhile a file is online-only, its snippets won't expand when you're offline or before it has synced — and updates to it may not be picked up reliably.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("To fix it, make the folder always available offline:")
+                .font(.callout.weight(.semibold))
+            fixImage
+            Text("In Finder, right-click the folder and choose “Make available offline”.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Done", action: onClose).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+        // Demand the natural height so the sheet sizes to content and isn't
+        // squished by the Settings window's fixed height.
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var fixImage: some View {
+        if let url = Bundle.main.url(forResource: "offline-fix", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable().scaledToFit()
+                .frame(maxWidth: .infinity)
+                .frame(height: 230)   // definite height so it can't be compressed
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.08))
+                .frame(height: 130)
+                .overlay(
+                    Label("Screenshot", systemImage: "photo")
+                        .font(.caption).foregroundStyle(.tertiary))
+                .overlay(RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.secondary.opacity(0.3),
+                                  style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         }
     }
 }

@@ -165,15 +165,50 @@ final class SnippetStore: ObservableObject {
         loadError = (matchDir == nil) ? "Could not locate espanso's config directory." : nil
     }
 
+    /// Re-check availability and reload if it changed — e.g. the user just made a
+    /// cloud folder "Available offline" (an online-only category can now be read),
+    /// or a downloaded file got evicted. Called when the app regains focus /
+    /// Settings opens, so warnings clear (and snippets load) without a relaunch.
+    func revalidateAvailability() {
+        let shouldReload = categories.contains { category in
+            // Retry any online-only category (it may now be readable), and catch
+            // a previously-loaded file that has since been evicted.
+            category.isOnlineOnly || Self.isFileDataless(category.url)
+        }
+        if shouldReload { load() }
+    }
+
     private func categories(in dir: URL, source: SnippetSource, fm: FileManager) -> [SnippetCategory] {
         guard let files = try? matchFiles(in: dir, fm: fm) else { return [] }
         return files.compactMap { url -> SnippetCategory? in
-            guard var category = Self.parseFile(url) else { return nil }
+            // Load on access: reading faults in a pinned/available cloud file (or
+            // downloads an online-only one while online). If the read fails —
+            // we're offline and it was never downloaded — flag it online-only.
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                guard !source.isBuiltIn else { return nil }
+                var category = SnippetCategory(url: url, snippets: [], rawTop: [:])
+                category.sourceID = source.id
+                category.isReadOnly = true
+                category.isOnlineOnly = true
+                return category
+            }
+            guard var category = Self.parseFile(text: text, url: url) else { return nil }
             category.sourceID = source.id
             category.isReadOnly = source.isReadOnly
             return category
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// True if `url` is an online-only File Provider placeholder that hasn't been
+    /// read/faulted in. Uses `lstat` metadata only (no download). Used to notice a
+    /// previously-loaded file that Drive has since evicted.
+    static func isFileDataless(_ url: URL) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return false }
+        let sfDataless: UInt32 = 0x4000_0000  // SF_DATALESS
+        if (info.st_flags & sfDataless) != 0 { return true }
+        return info.st_size > 0 && info.st_blocks == 0
     }
 
     /// Top-level `.yml`/`.yaml` files in a directory (packages excluded for now).
@@ -188,6 +223,11 @@ final class SnippetStore: ObservableObject {
     /// Parse one match file into a SnippetCategory. Returns nil on unreadable files.
     static func parseFile(_ url: URL) -> SnippetCategory? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return parseFile(text: text, url: url)
+    }
+
+    /// Parse already-read YAML `text` into a SnippetCategory (nil if malformed).
+    static func parseFile(text: String, url: URL) -> SnippetCategory? {
         // Empty file → empty category.
         guard let top = (try? Yams.load(yaml: text)) as? [String: Any] else {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
