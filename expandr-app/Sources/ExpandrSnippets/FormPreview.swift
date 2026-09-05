@@ -15,7 +15,7 @@ enum FormPreview {
         guard let bin = rendererBinary() else { throw PreviewError.rendererNotFound }
 
         var spec = FormBuilder.params(from: fields)
-        spec["title"] = title.isEmpty ? "espanso" : title
+        spec["title"] = title.isEmpty ? "Preview" : title
         spec["max_form_width"] = 700
         spec["max_form_height"] = 500
         let data = try JSONSerialization.data(withJSONObject: spec)

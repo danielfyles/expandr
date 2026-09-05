@@ -854,7 +854,7 @@ struct SnippetEditor: View {
 
     private func runPreview() {
         do {
-            try FormPreview.show(title: editor.snippet?.primaryText ?? "espanso", fields: editor.formFields)
+            try FormPreview.show(title: editor.snippet?.primaryText ?? "Preview", fields: editor.formFields)
         } catch {
             previewError = error.localizedDescription
         }
