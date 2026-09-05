@@ -617,7 +617,10 @@ struct ContentView: View {
                     .padding(8)
             }
         }
-        .onAppear { restoreCategorySelection() }
+        .onAppear {
+            restoreCategorySelection()
+            EngineService.ensureRunning()  // register+start the bundled engine (no-op in dev)
+        }
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification)) { _ in
             // Coming back from Finder (e.g. after making a folder available

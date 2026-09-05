@@ -30,15 +30,19 @@ enum FormPreview {
         stdin.fileHandleForWriting.closeFile()
     }
 
-    /// Locate the renderer: `$EXPANDR_FORM_BIN`, then the helper bundle next to
-    /// this app, then the dev build product.
+    /// Locate the renderer: `$EXPANDR_FORM_BIN`, then the helper nested inside the
+    /// shipping app (Contents/Helpers), then the sibling dev build product.
     private static func rendererBinary() -> URL? {
         let fm = FileManager.default
         if let env = ProcessInfo.processInfo.environment["EXPANDR_FORM_BIN"],
            fm.isExecutableFile(atPath: env) {
             return URL(fileURLWithPath: env)
         }
-        // Sibling of this .app: build/ExpandrForm.app/Contents/MacOS/ExpandrForm
+        // Shipping app: Expandr.app/Contents/Helpers/ExpandrForm.app/…
+        let nested = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm")
+        if fm.isExecutableFile(atPath: nested.path) { return nested }
+        // Dev: sibling of this .app (build/ExpandrForm.app/…)
         let sibling = Bundle.main.bundleURL
             .deletingLastPathComponent()
             .appendingPathComponent("ExpandrForm.app/Contents/MacOS/ExpandrForm")
