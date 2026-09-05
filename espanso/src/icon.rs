@@ -149,14 +149,17 @@ pub fn load_icon_paths(runtime_dir: &Path) -> Result<IconPaths> {
 }
 
 fn extract_icon(data: &[u8], target_file: &Path) -> Result<PathBuf> {
-    if target_file.exists() {
-        debug!(
-            "skipping extraction for '{}', as it's already present",
-            target_file.display()
-        );
-    } else {
+    // Always (re)write the icon rather than skipping when the file exists.
+    // Upstream espanso skipped existing files, but that leaves stale icons in
+    // the cache when the bundled artwork changes (e.g. Expandr's own icons, or a
+    // machine that previously ran espanso) — the tray then keeps showing the old
+    // icon. Rewriting each launch is cheap and guarantees the shipped art wins.
+    let is_stale = std::fs::read(target_file).map(|existing| existing != data).unwrap_or(true);
+    if is_stale {
         std::fs::write(target_file, data)?;
         info!("extracted icon to: {}", target_file.display());
+    } else {
+        debug!("icon '{}' already up to date", target_file.display());
     }
 
     Ok(target_file.to_owned())
