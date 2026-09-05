@@ -307,9 +307,9 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("New category in \(source.displayName)")
-                // Match the trailing inset of the per-row folder counts (badges),
-                // so the "+" doesn't sit hard against the sidebar edge.
-                .padding(.trailing, 10)
+                // Align the "+" with the trailing edge of the per-row folder
+                // counts (badges), which sit further in than the section header.
+                .padding(.trailing, 16)
             }
         }
     }
