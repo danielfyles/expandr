@@ -199,8 +199,53 @@ fn launcher_main(args: CliModuleArgs) -> i32 {
     LAUNCHER_SUCCESS
 }
 
+// Native launcher (no wxWidgets). There is no first-run wizard here — the
+// SwiftUI app (Expandr Snippets) drives onboarding. This entry point just makes
+// sure the config exists, requests macOS Accessibility permission, and starts
+// the daemon. Registering the launchd service is handled by the app.
 #[cfg(not(feature = "modulo"))]
-fn launcher_main(_: CliModuleArgs) -> i32 {
-    // TODO: handle what happens here
-    unimplemented!();
+fn launcher_main(args: CliModuleArgs) -> i32 {
+    let paths = args.paths.expect("missing paths in launcher main");
+
+    // Bail out if espanso is already running.
+    let lock_file = acquire_daemon_lock(&paths.runtime);
+    if lock_file.is_none() {
+        error!("espanso is already running, refusing to launch a second instance");
+        return LAUNCHER_ALREADY_RUNNING;
+    }
+    drop(lock_file);
+
+    let paths_overrides = args
+        .paths_overrides
+        .expect("missing paths overrides in launcher main");
+
+    // On macOS, request Accessibility permission (required to detect and inject
+    // text). This raises the system prompt attributed to this app; if it's not
+    // yet granted the daemon still launches but won't expand until the user
+    // grants it and the service restarts.
+    #[cfg(target_os = "macos")]
+    {
+        if !accessibility::is_accessibility_enabled() {
+            accessibility::prompt_enable_accessibility();
+        }
+    }
+
+    if let Err(err) = crate::config::populate_default_config(&paths.config) {
+        error!("Error populating the config directory: {err:?}");
+        return LAUNCHER_CONFIG_DIR_POPULATION_FAILURE;
+    }
+
+    // Record that first-run setup is done so we don't keep prompting.
+    if let Ok(preferences) = crate::preferences::get_default(&paths.runtime) {
+        preferences.set_completed_wizard(true);
+    }
+
+    // Hide the Dock icon (the engine runs headless) and start the daemon.
+    #[cfg(target_os = "macos")]
+    {
+        espanso_mac_utils::convert_to_background_app();
+    }
+    daemon::launch_daemon(&paths_overrides).expect("failed to launch daemon");
+
+    LAUNCHER_SUCCESS
 }
