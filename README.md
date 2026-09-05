@@ -11,6 +11,13 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/espanso/espanso)
 
+> **This repository is a fork.** It is **Expandr**, an independent, macOS-focused fork of
+> [espanso](https://github.com/espanso/espanso) maintained by Daniel Fyles since 2026. It adds a native
+> SwiftUI snippet builder (*Expandr Snippets*) and a native form renderer, among other changes — see
+> [NOTICE.md](/NOTICE.md) for a summary. Expandr is **not affiliated with or endorsed by** the espanso
+> project, and does not use the espanso name or logo to identify itself. Like espanso, it is licensed
+> under the [GPL-3.0](/LICENSE).
+
 |         Example: 2019          |              Example: 2025              |
 | :----------------------------: | :-------------------------------------: |
 | ![example](images/example.gif) | ![example2025](images/example-2025.gif) |
@@ -116,3 +123,10 @@ please consider  making a small donation, it really helps :)
 
 espanso was created by [Federico Terzi](http://federicoterzi.com)
 and is licensed under the [GPL-3.0 license](/LICENSE).
+
+Expandr is a fork of espanso, maintained by Daniel Fyles, and remains licensed
+under the [GPL-3.0](/LICENSE). It retains espanso's copyright notices;
+modifications in this fork are Copyright © 2026 Daniel Fyles and are released
+under the same GPL-3.0 license. A summary of changes is in [NOTICE.md](/NOTICE.md).
+Expandr is an independent project, not affiliated with or endorsed by espanso or
+its authors.
