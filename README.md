@@ -1,132 +1,74 @@
-# ![Espanso Logo](images/espanso-dark.png#gh-dark-mode-only) ![Espanso Logo](images/espanso-light.png#gh-light-mode-only)
+# Expandr
 
-> *A cross-platform Text Expander written in Rust*
+> *A native macOS text expander and snippet builder.*
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/espanso/espanso)
-![Maintenance](https://img.shields.io/badge/Maintained-yes-green.svg)
-![Language](https://img.shields.io/badge/language-rust-orange)
-![License](https://img.shields.io/github/license/espanso/espanso)
+Expandr lets you type a short **trigger** (say `:addr`) and have it instantly
+replaced with **something longer** — an address, a canned reply, a code snippet,
+today's date, the output of a script — anywhere you can type on your Mac.
 
-![Platforms](https://img.shields.io/badge/platforms-Windows%2C%20macOS%20and%20Linux-blue)
+It pairs a fast, local expansion engine with **Expandr Snippets**, a native
+SwiftUI app for building and organising your snippets, so you don't have to hand‑edit
+configuration files (though you still can — everything is plain YAML).
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/espanso/espanso)
+Expandr is a macOS‑focused fork of [espanso](https://github.com/espanso/espanso);
+see [Credits & license](#credits--license).
 
-> **This repository is a fork.** It is **Expandr**, an independent, macOS-focused fork of
-> [espanso](https://github.com/espanso/espanso) maintained by Daniel Fyles since 2026. It adds a native
-> SwiftUI snippet builder (*Expandr Snippets*) and a native form renderer, among other changes — see
-> [NOTICE.md](/NOTICE.md) for a summary. Expandr is **not affiliated with or endorsed by** the espanso
-> project, and does not use the espanso name or logo to identify itself. Like espanso, it is licensed
-> under the [GPL-3.0](/LICENSE).
+## Features
 
-|         Example: 2019          |              Example: 2025              |
-| :----------------------------: | :-------------------------------------: |
-| ![example](images/example.gif) | ![example2025](images/example-2025.gif) |
+- **System‑wide expansion** — works in almost any app, 100% locally, with no tracking.
+- **Expandr Snippets** — a native app to create and organise snippets: folders,
+  global search, drag‑and‑drop, multi‑select, and in‑place editing.
+- **Dynamic replacements** — variables for dates, shell output, the clipboard,
+  random values and choices, plus a visual **Form designer** with a native
+  SwiftUI form/choice renderer.
+- **Multiple sources** — read and expand snippets from additional folders
+  (e.g. a shared cloud drive), mark any source **read‑only**, and get a warning
+  when a cloud folder isn't available offline.
+- **Plain‑YAML config** — snippets are simple, portable text files.
+- **Regex triggers** and **app‑specific** behaviour, inherited from the engine.
 
-## Quick Links
+## A snippet looks like this
 
-* [espanso website](https://espanso.org)
-* [espanso hub](https://hub.espanso.org/)
+Snippets are grouped into YAML files. You rarely need to write these by hand —
+Expandr Snippets does it for you — but the format is simple:
 
-### What is a Text Expander?
-
-A *text expander* is a program that detects when you type
-a specific **keyword** and replaces it with **something else**.
-This is useful in many ways:
-
-* **Save a lot of typing**, expanding common sentences
-* Create **system-wide** code snippets
-* Execute **custom scripts**
-* Use **emojis** like a pro
-* System-wide 'autocorrect' specific to you
-
-## Key Features
-
-* Cross-platform (**Windows**, **macOS**, **Linux**)
-* Privacy-first (100% local, no tracking)
-* Works with almost **any program**
-* **Emoji** support 😄
-* **Image** support
-* Includes a powerful **Search Bar** 🔎
-* **Date** expansion support
-* **Custom scripts** support
-* **Shell commands** support
-* **App-specific** configurations
-* Support [Forms](https://espanso.org/docs/matches/forms/)
-* Expandable with **packages**
-* Built-in **package manager** for [espanso hub](https://hub.espanso.org/)
-* File based configuration
-* Support Regex triggers
-* Experimental Wayland support
-* Written in Rust (Fast, Reliable)
-
-## Community & Support
-* 💬 [espanso Discord Server](https://discord.gg/DFcCNDg7bB)
-* 📖 [official documentation](https://espanso.org/docs/)
-* 💬 [official Subreddit](https://www.reddit.com/r/espanso/)
-* 🐛 [Report Issues](https://github.com/espanso/espanso/issues)
-* 💡 [Feature Requests](https://github.com/espanso/espanso/discussions)
-
-## Quick Start Examples
-
-You can create additional files to organize your matches any way you want.<br />
-Make sure to adhere to proper YAML spacing.
 ```yaml
 matches:
   - trigger: ":hello"
-    replace: "Hi There!"
+    replace: "Hi there!"
   - triggers: [":test1", ":test2"]
-    replace: "These both expand to the same thing"
+    replace: "Both of these expand to the same thing"
 ```
-## Team Members and Contributors
 
-### Team
+## Building
 
-[Federico Terzi](https://github.com/federico-terzi) (Creator of espanso)<br />
-Rest of team in Alphabetical Order<br />
-[Archigos](https://github.com/Archigos) (Lead Maintainer)<br />
-[Auca](https://github.com/AucaCoyan) (Previous Lead Maintainer)<br />
-[n8henrie](https://github.com/n8henrie)<br />
-[smeech](https://github.com/smeech)<br />
+Requires a recent macOS with Xcode command‑line tools, Swift, and the Rust
+toolchain (for the underlying engine).
 
-You can also see the up to date list of Team Members [here](https://github.com/orgs/espanso/people)
+```bash
+# Build and launch the Expandr Snippets app
+cd expandr-app
+./build-app.sh run
+```
 
-### Contributors
+The text‑expansion engine is written in Rust (inherited from espanso) and builds
+with `cargo`.
 
-So many people have helped the project along the way. Thank you all!
+## Status
 
-[![Image](https://contrib.rocks/image?repo=espanso/espanso)](https://github.com/espanso/espanso/graphs/contributors)
+Expandr is an actively developed, macOS‑first project. Expect rough edges.
 
-## Sponsors
+## Credits & license
 
-We want to thank SignPath.io for code signing the Windows binaries ❤️
+Expandr is built on **[espanso](https://github.com/espanso/espanso)**, the
+cross‑platform text expander created by [Federico Terzi](http://federicoterzi.com)
+and its contributors — huge thanks to them for the engine that makes this possible.
 
-## Donations
+Expandr is an **independent fork**, maintained by Daniel Fyles, and is **not
+affiliated with or endorsed by** the espanso project. It does not use the espanso
+name or logo to identify itself.
 
-espanso is a free, open-source software project created by [Federico Terzi](https://github.com/federico-terzi) and now maintained by a small team.<br />
-If you liked the project and would like to support further development,
-please consider  making a small donation, it really helps :)
-
-### Current Options
-
-| PayPal | Coming Soon |
-| :----: | :---------: |
-| [![Donate with PayPal](images/donate.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=FHNLR5DRS267E&source=url) | |
-
-## Remarks
-
-* Thanks to [libxdo](https://github.com/jordansissel/xdotool) and [xclip](https://github.com/astrand/xclip), used to implement the Linux port.
-* Thanks to [libxkbcommon](https://xkbcommon.org/) and [wl-clipboard](https://github.com/bugaevc/wl-clipboard), used to implement the Wayland port.
-* Thanks to [wxWidgets](https://www.wxwidgets.org/) for providing a powerful cross-platform GUI library.
-* Free code signing provided by SignPath.io, certificate by SignPath Foundation.
-
-## License
-
-espanso was created by [Federico Terzi](http://federicoterzi.com)
-and is licensed under the [GPL-3.0 license](/LICENSE).
-
-Expandr is a fork of espanso, maintained by Daniel Fyles, and remains licensed
-under the [GPL-3.0](/LICENSE). It retains espanso's copyright notices;
-modifications in this fork are Copyright © 2026 Daniel Fyles and are released
-under the same GPL-3.0 license. A summary of changes is in [NOTICE.md](/NOTICE.md).
-Expandr is an independent project, not affiliated with or endorsed by espanso or
-its authors.
+Like espanso, Expandr is licensed under the **[GPL‑3.0](/LICENSE)**. It retains
+espanso's copyright notices; modifications in this fork are Copyright © 2026
+Daniel Fyles and are released under the same licence. A summary of changes from
+upstream is in **[NOTICE.md](/NOTICE.md)**.
