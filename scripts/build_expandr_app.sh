@@ -54,6 +54,12 @@ cp "$GUI_BIN"    "$APP/Contents/MacOS/ExpandrSnippets"
 cp "$ENGINE_BIN" "$APP/Contents/MacOS/espanso"
 cp -R "$FORM_APP" "$APP/Contents/Helpers/ExpandrForm.app"
 
+# Embed Sparkle.framework (auto-update) and point the GUI's rpath at it.
+mkdir -p "$APP/Contents/Frameworks"
+cp -R "expandr-app/.build/release/Sparkle.framework" "$APP/Contents/Frameworks/"
+install_name_tool -add_rpath "@executable_path/../Frameworks" \
+  "$APP/Contents/MacOS/ExpandrSnippets" 2>/dev/null || true
+
 cp -f espanso/src/res/macos/icon.icns "$APP/Contents/Resources/icon.icns"
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp espanso-ui/fonts/Fraunces.ttf  "$APP/Contents/Resources/Fonts/"
@@ -80,6 +86,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key>    <true/>
   <key>LSMinimumSystemVersion</key>     <string>13.0</string>
   <key>NSHumanReadableCopyright</key>   <string>Expandr — a fork of espanso (© Federico Terzi). GPL-3.0. Fork © 2026 Daniel Fyles.</string>
+  <key>SUFeedURL</key>                  <string>${SPARKLE_FEED_URL}</string>
+  <key>SUPublicEDKey</key>              <string>${SPARKLE_PUBLIC_KEY}</string>
+  <key>SUEnableAutomaticChecks</key>    <true/>
 </dict>
 </plist>
 PLIST
@@ -90,7 +99,7 @@ PLIST
 DEVID_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
 ENTITLEMENTS="$REPO/scripts/entitlements.plist"
 
-sign() {  # sign <path>
+sign() {  # our own code — hardened runtime + app entitlements
   if [[ -n "$DEVID_ID" ]]; then
     codesign --force --options runtime --timestamp \
       --entitlements "$ENTITLEMENTS" -s "$DEVID_ID" "$1"
@@ -99,9 +108,25 @@ sign() {  # sign <path>
   fi
 }
 
+sign_helper() {  # third-party helpers (Sparkle) — hardened runtime, no app entitlements
+  if [[ -n "$DEVID_ID" ]]; then
+    codesign --force --options runtime --timestamp -s "$DEVID_ID" "$1"
+  else
+    codesign --force -s - "$1"
+  fi
+}
+
 echo "==> Signing (${DEVID_ID:-ad-hoc})…"
-# Inside-out: helper app's inner Mach-O, the helper app, the engine binary, the
-# GUI binary, then the outer bundle.
+# Sparkle first (inside-out): XPC services, helper apps, the dylib, the framework.
+SPK="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+sign_helper "$SPK/XPCServices/Downloader.xpc"
+sign_helper "$SPK/XPCServices/Installer.xpc"
+sign_helper "$SPK/Updater.app"
+sign_helper "$SPK/Autoupdate"
+sign_helper "$SPK/Sparkle"
+sign_helper "$APP/Contents/Frameworks/Sparkle.framework"
+
+# Then our code, inside-out: form helper, engine, GUI, then the outer bundle.
 sign "$APP/Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm"
 sign "$APP/Contents/Helpers/ExpandrForm.app"
 sign "$APP/Contents/MacOS/espanso"
