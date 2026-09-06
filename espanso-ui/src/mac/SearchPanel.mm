@@ -257,6 +257,18 @@ static NSString *stringValue(id v) {
     return [v isKindOfClass:[NSString class]] ? (NSString *)v : nil;
 }
 
+// Collapse newlines and runs of whitespace into single spaces, trimmed, so a
+// multi-line snippet body renders as one tidy line in the search list.
+static NSString *flattenToOneLine(NSString *s) {
+    NSArray<NSString *> *parts =
+        [s componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSMutableArray<NSString *> *words = [NSMutableArray array];
+    for (NSString *p in parts) {
+        if (p.length > 0) [words addObject:p];
+    }
+    return [words componentsJoinedByString:@" "];
+}
+
 static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     if (q.length == 0) return YES;
     NSMutableString *hay = [NSMutableString string];
@@ -328,8 +340,15 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
 
     NSTextField *label = [self plainLabel:16 color:[NSColor labelColor]];
     label.font = espansoBodyFont(16);
-    label.stringValue = stringValue(item[@"label"]) ?: @"";
+    // Snippet labels are often the (multi-line) replacement body. Flatten any
+    // newlines/runs of whitespace to single spaces so the row shows one clean
+    // line that the field then truncates with an ellipsis.
+    label.stringValue = flattenToOneLine(stringValue(item[@"label"]) ?: @"");
     label.translatesAutoresizingMaskIntoConstraints = NO;
+    // Yield width readily so the trailing cap wins and the text truncates rather
+    // than stretching the row or shoving the trigger badge.
+    [label setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                    forOrientation:NSLayoutConstraintOrientationHorizontal];
     [cell addSubview:label];
 
     [label.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:sideInset].active = YES;
@@ -358,8 +377,15 @@ static BOOL matchesQuery(NSDictionary *item, NSString *q) {
     f.drawsBackground = NO;
     f.font = [NSFont systemFontOfSize:size weight:NSFontWeightRegular];
     f.textColor = color;
+    // Hard single-line with tail truncation — set on both the field and its cell
+    // so a long (or newline-containing) string can never wrap onto a second line.
+    f.usesSingleLineMode = YES;
+    f.maximumNumberOfLines = 1;
     f.lineBreakMode = NSLineBreakByTruncatingTail;
     [(NSTextFieldCell *)f.cell setUsesSingleLineMode:YES];
+    [(NSTextFieldCell *)f.cell setWraps:NO];
+    [(NSTextFieldCell *)f.cell setScrollable:NO];
+    [(NSTextFieldCell *)f.cell setLineBreakMode:NSLineBreakByTruncatingTail];
     return f;
 }
 
