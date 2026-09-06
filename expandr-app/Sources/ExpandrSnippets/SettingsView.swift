@@ -1,10 +1,89 @@
 import SwiftUI
 import AppKit
 
-/// Preferences (⌘,) — manage the folders Expandr reads snippets from. The first
-/// (built-in) source is espanso's own match dir; additional sources are shared
-/// or external folders and can be marked read-only.
+/// Preferences (⌘,) — a tabbed window. **General** covers system permissions and
+/// launch behaviour; **Sources** manages the folders Expandr reads snippets from.
 struct SettingsView: View {
+    @ObservedObject var store: SnippetStore
+
+    var body: some View {
+        TabView {
+            GeneralSettingsView()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            SourcesSettingsView(store: store)
+                .tabItem { Label("Sources", systemImage: "folder") }
+        }
+        .frame(width: 560)
+    }
+}
+
+// MARK: - General
+
+/// System permissions and launch behaviour. Accessibility is what actually lets
+/// the engine type expansions, so give the user a one-click path to confirm it;
+/// "Start at login" re-arms the background agent if its permission was rescinded.
+struct GeneralSettingsView: View {
+    // Mirrors whether the launchd agent is registered (RunAtLoad). Seeded on
+    // appear and after each toggle so the UI reflects the real state.
+    @State private var startAtLogin = EngineService.isRegistered
+    // Guards against the onChange firing when we set the value programmatically.
+    @State private var syncingToggle = false
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Accessibility permission")
+                        .font(.body.weight(.semibold))
+                    Text("Expandr needs macOS Accessibility permission to type your expansions. If expansions stop working, open Accessibility settings and make sure Expandr (and its Engine Agent) is enabled.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Accessibility Settings…") {
+                        openAccessibilitySettings()
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                Toggle("Start Expandr at login", isOn: $startAtLogin)
+                    .onChange(of: startAtLogin) { newValue in
+                        guard !syncingToggle else { return }
+                        EngineService.setStartAtLogin(newValue) { actual in
+                            syncingToggle = true
+                            startAtLogin = actual
+                            syncingToggle = false
+                        }
+                    }
+                Text("Keeps the background engine running so your snippets expand in every app. Turn this off to stop Expandr launching automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(height: 300)
+        .onAppear {
+            syncingToggle = true
+            startAtLogin = EngineService.isRegistered
+            syncingToggle = false
+        }
+    }
+
+    /// Deep-link straight to System Settings ▸ Privacy & Security ▸ Accessibility.
+    private func openAccessibilitySettings() {
+        if let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - Sources
+
+/// Manage the folders Expandr reads snippets from. The first (built-in) source is
+/// espanso's own match dir; additional sources are shared or external folders and
+/// can be marked read-only.
+struct SourcesSettingsView: View {
     @ObservedObject var store: SnippetStore
     @State private var removing: SnippetSource?
     // The source whose "online-only" explanation modal is currently open.
@@ -32,7 +111,7 @@ struct SettingsView: View {
             }
             .padding(12)
         }
-        .frame(width: 520, height: 360)
+        .frame(height: 360)
         .confirmationDialog(
             "Remove this source?",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),

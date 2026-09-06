@@ -41,6 +41,24 @@ enum EngineService {
         DispatchQueue.global(qos: .userInitiated).async { _ = run(["service", "restart"]) }
     }
 
+    /// Enable or disable "start at login" by registering / unregistering the
+    /// launchd agent (register writes the RunAtLoad plist; unregister removes it).
+    /// Enabling also starts the engine now so expansion works immediately.
+    /// Returns the resulting registered state on the main queue via `completion`.
+    static func setStartAtLogin(_ enabled: Bool, completion: @escaping (Bool) -> Void) {
+        guard bundledEngine != nil else { completion(false); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            if enabled {
+                if !isRegistered { _ = run(["service", "register"]) }
+                _ = run(["service", "start"])
+            } else {
+                _ = run(["service", "unregister"])
+            }
+            let state = isRegistered
+            DispatchQueue.main.async { completion(state) }
+        }
+    }
+
     /// Run the bundled engine with `args`, returning its exit status and output.
     @discardableResult
     private static func run(_ args: [String]) -> (status: Int32, output: String) {
