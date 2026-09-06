@@ -26,16 +26,45 @@ use crate::event::{
 };
 
 const CONTEXT_ITEM_EXIT: u32 = 0;
-const CONTEXT_ITEM_RELOAD: u32 = 1;
 const CONTEXT_ITEM_ENABLE: u32 = 2;
 const CONTEXT_ITEM_DISABLE: u32 = 3;
 const CONTEXT_ITEM_SECURE_INPUT_EXPLAIN: u32 = 4;
 const CONTEXT_ITEM_SECURE_INPUT_TRIGGER_WORKAROUND: u32 = 5;
 const CONTEXT_ITEM_OPEN_SEARCH: u32 = 6;
-const CONTEXT_ITEM_SHOW_LOGS: u32 = 7;
-const CONTEXT_ITEM_OPEN_CONFIG_FOLDER: u32 = 8;
+const CONTEXT_ITEM_OPEN_EDITOR: u32 = 7;
 // Non-actionable status header shown at the top of the tray menu.
 const CONTEXT_ITEM_STATUS_HEADER: u32 = 9;
+
+/// LaunchServices bundle id of the outer Expandr.app (the editor GUI). The engine
+/// runs from a nested sub-app, so it drives the editor by bundle id rather than
+/// by path.
+#[cfg(target_os = "macos")]
+const EDITOR_BUNDLE_ID: &str = "app.expandr";
+/// Process name of the editor GUI executable (used to quit it on Exit).
+#[cfg(target_os = "macos")]
+const EDITOR_PROCESS_NAME: &str = "ExpandrSnippets";
+
+/// Launch or activate the editor GUI (the outer Expandr.app). Fire-and-forget:
+/// spawns `open -b <bundle id>` and doesn't wait.
+#[cfg(target_os = "macos")]
+fn launch_editor() {
+    let _ = std::process::Command::new("/usr/bin/open")
+        .args(["-b", EDITOR_BUNDLE_ID])
+        .spawn();
+}
+#[cfg(not(target_os = "macos"))]
+fn launch_editor() {}
+
+/// Ask the editor GUI to quit (a graceful SIGTERM; the editor autosaves). Called
+/// as part of "Exit Expandr" so the whole product goes down together.
+#[cfg(target_os = "macos")]
+fn quit_editor() {
+    let _ = std::process::Command::new("/usr/bin/pkill")
+        .args(["-x", EDITOR_PROCESS_NAME])
+        .spawn();
+}
+#[cfg(not(target_os = "macos"))]
+fn quit_editor() {}
 
 pub struct ContextMenuMiddleware {
     is_enabled: RefCell<bool>,
@@ -89,14 +118,11 @@ impl ContextMenuMiddleware {
             status_header,
             MenuItem::Separator,
             toggle_enabled,
-            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_OPEN_SEARCH, "Open search bar")),
-            MenuItem::Separator,
-            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_RELOAD, "Reload config")),
             MenuItem::Simple(SimpleMenuItem::new(
-                CONTEXT_ITEM_OPEN_CONFIG_FOLDER,
-                "Open config folder",
+                CONTEXT_ITEM_OPEN_EDITOR,
+                "Open snippet editor",
             )),
-            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_SHOW_LOGS, "Show logs")),
+            MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_OPEN_SEARCH, "Open search bar")),
             MenuItem::Separator,
             MenuItem::Simple(SimpleMenuItem::new(CONTEXT_ITEM_EXIT, "Exit Expandr")),
         ];
@@ -145,14 +171,19 @@ impl Middleware for ContextMenuMiddleware {
             EventType::TrayIconClicked => self.build_menu_event(event.source_id),
             EventType::ContextMenuClicked(context_click_event) => {
                 match context_click_event.context_item_id {
-                    CONTEXT_ITEM_EXIT => Event::caused_by(
-                        event.source_id,
-                        EventType::ExitRequested(ExitMode::ExitAllProcesses),
-                    ),
-                    CONTEXT_ITEM_RELOAD => Event::caused_by(
-                        event.source_id,
-                        EventType::ExitRequested(ExitMode::RestartWorker),
-                    ),
+                    CONTEXT_ITEM_EXIT => {
+                        // "Exit Expandr" tears the whole product down: quit the
+                        // editor GUI, then exit the engine's own processes.
+                        quit_editor();
+                        Event::caused_by(
+                            event.source_id,
+                            EventType::ExitRequested(ExitMode::ExitAllProcesses),
+                        )
+                    }
+                    CONTEXT_ITEM_OPEN_EDITOR => {
+                        launch_editor();
+                        Event::caused_by(event.source_id, EventType::NOOP)
+                    }
                     CONTEXT_ITEM_ENABLE => {
                         dispatch(Event::caused_by(event.source_id, EventType::EnableRequest));
                         Event::caused_by(event.source_id, EventType::NOOP)
@@ -177,17 +208,6 @@ impl Middleware for ContextMenuMiddleware {
                     }
                     CONTEXT_ITEM_OPEN_SEARCH => {
                         dispatch(Event::caused_by(event.source_id, EventType::ShowSearchBar));
-                        Event::caused_by(event.source_id, EventType::NOOP)
-                    }
-                    CONTEXT_ITEM_SHOW_LOGS => {
-                        dispatch(Event::caused_by(event.source_id, EventType::ShowLogs));
-                        Event::caused_by(event.source_id, EventType::NOOP)
-                    }
-                    CONTEXT_ITEM_OPEN_CONFIG_FOLDER => {
-                        dispatch(Event::caused_by(
-                            event.source_id,
-                            EventType::ShowConfigFolder,
-                        ));
                         Event::caused_by(event.source_id, EventType::NOOP)
                     }
                     // The status header is non-actionable (disabled on macOS); on
