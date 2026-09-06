@@ -32,20 +32,6 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Accessibility permission")
-                        .font(.body.weight(.semibold))
-                    Text("Expandr needs macOS Accessibility permission to type your expansions. If expansions stop working, open Accessibility settings and make sure Expandr (and its Engine Agent) is enabled.")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Open Accessibility Settings…") {
-                        openAccessibilitySettings()
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-
-            Section {
                 Toggle("Start Expandr at login", isOn: $startAtLogin)
                     .onChange(of: startAtLogin) { newValue in
                         guard !syncingToggle else { return }
@@ -55,9 +41,23 @@ struct GeneralSettingsView: View {
                             syncingToggle = false
                         }
                     }
-                Text("Keeps the background engine running so your snippets expand in every app. Turn this off to stop Expandr launching automatically.")
+                Text("Keeps Expandr Agent running so your snippets expand.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Accessibility permission")
+                        .font(.body.weight(.semibold))
+                    Text("Expandr needs permission from your Mac to expand your snippets. You can open Accessibility Settings to check that both Expandr and Expandr Agent are enabled.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Accessibility Settings…") {
+                        openAccessibilitySettings()
+                    }
+                }
+                .padding(.vertical, 4)
             }
         }
         .formStyle(.grouped)
@@ -149,8 +149,15 @@ struct SourcesSettingsView: View {
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.displayName).font(.body.weight(.medium))
-                Text(source.isBuiltIn ? "Your main snippets folder" : source.path)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                // The folder path as a link — click to reveal it in Finder.
+                Button {
+                    NSWorkspace.shared.open(source.url)
+                } label: {
+                    Text(source.url.path)
+                        .font(.caption).lineLimit(1).truncationMode(.middle)
+                }
+                .buttonStyle(.link)
+                .help("Reveal this folder in Finder")
             }
             Spacer()
             if source.isBuiltIn {
