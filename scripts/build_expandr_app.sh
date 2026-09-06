@@ -50,8 +50,37 @@ echo "==> Assembling $APP…"
 rm -rf -- "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
-cp "$GUI_BIN"    "$APP/Contents/MacOS/ExpandrSnippets"
-cp "$ENGINE_BIN" "$APP/Contents/MacOS/espanso"
+cp "$GUI_BIN" "$APP/Contents/MacOS/ExpandrSnippets"
+
+# The engine goes in its OWN nested sub-app with its own bundle id, so it doesn't
+# claim the outer app's LaunchServices identity (which would make `open` poke the
+# background engine instead of launching the GUI window). The folder name is what
+# macOS shows in Login Items & Extensions, so it reads "Engine Agent" there.
+ENGINE_APP="$APP/Contents/Helpers/Engine Agent.app"
+mkdir -p "$ENGINE_APP/Contents/MacOS" "$ENGINE_APP/Contents/Resources"
+cp "$ENGINE_BIN" "$ENGINE_APP/Contents/MacOS/espanso"
+cp -f espanso/src/res/macos/icon.icns "$ENGINE_APP/Contents/Resources/icon.icns"
+echo "APPL????" > "$ENGINE_APP/Contents/PkgInfo"
+cat > "$ENGINE_APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>               <string>Engine Agent</string>
+  <key>CFBundleDisplayName</key>        <string>Engine Agent</string>
+  <key>CFBundleIdentifier</key>         <string>${BUNDLE_ID}.engine</string>
+  <key>CFBundleExecutable</key>         <string>espanso</string>
+  <key>CFBundleIconFile</key>           <string>icon</string>
+  <key>CFBundlePackageType</key>        <string>APPL</string>
+  <key>CFBundleShortVersionString</key> <string>${EXPANDR_VERSION}</string>
+  <key>CFBundleVersion</key>            <string>${EXPANDR_VERSION}</string>
+  <key>LSUIElement</key>                <true/>
+  <key>LSBackgroundOnly</key>           <true/>
+</dict>
+</plist>
+PLIST
+
+# ExpandrForm stays in the outer Helpers; the engine finds it there.
 cp -R "$FORM_APP" "$APP/Contents/Helpers/ExpandrForm.app"
 
 # Embed Sparkle.framework (auto-update) and point the GUI's rpath at it.
@@ -129,7 +158,8 @@ sign_helper "$APP/Contents/Frameworks/Sparkle.framework"
 # Then our code, inside-out: form helper, engine, GUI, then the outer bundle.
 sign "$APP/Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm"
 sign "$APP/Contents/Helpers/ExpandrForm.app"
-sign "$APP/Contents/MacOS/espanso"
+sign "$ENGINE_APP/Contents/MacOS/espanso"
+sign "$ENGINE_APP"
 sign "$APP/Contents/MacOS/ExpandrSnippets"
 sign "$APP"
 

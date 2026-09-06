@@ -55,6 +55,18 @@ struct ContentView: View {
                 set: { if !$0 { deletingCategoryID = nil } })
     }
 
+    /// Snap any window back onto a visible screen. A remembered window position
+    /// can point at a monitor that's since been disconnected or rearranged, which
+    /// would open the window off-screen where it looks like nothing happened.
+    private func ensureWindowsOnScreen() {
+        DispatchQueue.main.async {
+            for window in NSApp.windows where window.isVisible {
+                let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(window.frame) }
+                if !onScreen { window.center() }
+            }
+        }
+    }
+
     /// Open the Preferences (Settings) window by selecting the same menu item the
     /// SwiftUI `Settings` scene installs — `performActionForItem` dispatches it
     /// exactly as a real menu pick, which is more reliable than sending the
@@ -620,6 +632,7 @@ struct ContentView: View {
         .onAppear {
             restoreCategorySelection()
             EngineService.ensureRunning()  // register+start the bundled engine (no-op in dev)
+            ensureWindowsOnScreen()        // never open off-screen on a since-disconnected monitor
         }
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification)) { _ in

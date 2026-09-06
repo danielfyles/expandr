@@ -184,13 +184,25 @@ fn form_renderer_path() -> Result<PathBuf> {
         }
     }
     if let Ok(exe) = std::env::current_exe() {
-        // exe is Expandr.app/Contents/MacOS/espanso → dir is Contents/MacOS.
+        // The engine lives in its own nested sub-app:
+        // Expandr.app/Contents/Helpers/Engine Agent.app/Contents/MacOS/espanso
+        // so `exe.parent()` is that sub-app's Contents/MacOS.
         if let Some(dir) = exe.parent() {
             if let Some(contents) = dir.parent() {
+                // ExpandrForm nested alongside the engine, inside its sub-app.
                 let nested =
                     contents.join("Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm");
                 if nested.exists() {
                     return Ok(nested);
+                }
+                // ExpandrForm as a sibling of the engine's sub-app, in the outer
+                // app's Helpers dir (Engine Agent.app -> Contents/Helpers).
+                if let Some(outer_helpers) = contents.parent().and_then(|p| p.parent()) {
+                    let outer =
+                        outer_helpers.join("ExpandrForm.app/Contents/MacOS/ExpandrForm");
+                    if outer.exists() {
+                        return Ok(outer);
+                    }
                 }
             }
             let sibling = dir.join("ExpandrForm");

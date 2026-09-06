@@ -14,6 +14,8 @@ struct ExpandrSnippetsApp: App {
                 .frame(minWidth: 820, minHeight: 480)
         }
         .windowToolbarStyle(.unified)
+        .defaultSize(width: 980, height: 640)
+        .defaultPosition(.center)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.checkForUpdates() }
