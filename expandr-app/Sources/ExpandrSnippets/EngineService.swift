@@ -4,11 +4,11 @@ import Foundation
 /// the shipping app and run as a launchd agent). In a dev build there is no
 /// bundled engine, so every method safely no-ops.
 enum EngineService {
-    /// The engine binary, nested in its own sub-app inside the shipping bundle:
-    /// Expandr.app/Contents/Helpers/Engine Agent.app/Contents/MacOS/espanso.
+    /// The agent binary, nested in its own sub-app inside the shipping bundle:
+    /// Expandr.app/Contents/Helpers/Expandr Agent.app/Contents/MacOS/espanso.
     static var bundledEngine: URL? {
         let url = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Helpers/Engine Agent.app/Contents/MacOS/espanso")
+            .appendingPathComponent("Contents/Helpers/Expandr Agent.app/Contents/MacOS/espanso")
         return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
     }
 

@@ -3,13 +3,13 @@
 # Build the unified, shippable Expandr.app (Apple Silicon).
 #
 # One bundle contains everything:
-#   Contents/MacOS/ExpandrSnippets   the Dock GUI (the app you open)   <- main executable
-#   Contents/MacOS/espanso           the text-expansion engine (run by launchd)
-#   Contents/Helpers/ExpandrForm.app the native form/choice renderer
+#   Contents/MacOS/ExpandrSnippets           the Dock GUI (the app you open)  <- main executable
+#   Contents/Helpers/Expandr Agent.app       the background text-expansion agent (run by launchd)
+#   Contents/Helpers/ExpandrForm.app         the native form/choice renderer
 #
 # The GUI registers and manages the background service (a launchd agent that runs
-# the nested `espanso` binary). Shipping it as a single bundle lets Sparkle update
-# the whole product atomically.
+# the nested Expandr Agent binary). Shipping it as a single bundle lets Sparkle
+# update the whole product atomically.
 #
 # Usage:
 #   ./scripts/build_expandr_app.sh                 # assemble + sign (Developer ID if available, else ad-hoc)
@@ -52,23 +52,23 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
 cp "$GUI_BIN" "$APP/Contents/MacOS/ExpandrSnippets"
 
-# The engine goes in its OWN nested sub-app with its own bundle id, so it doesn't
-# claim the outer app's LaunchServices identity (which would make `open` poke the
-# background engine instead of launching the GUI window). The folder name is what
-# macOS shows in Login Items & Extensions, so it reads "Engine Agent" there.
-ENGINE_APP="$APP/Contents/Helpers/Engine Agent.app"
-mkdir -p "$ENGINE_APP/Contents/MacOS" "$ENGINE_APP/Contents/Resources"
-cp "$ENGINE_BIN" "$ENGINE_APP/Contents/MacOS/espanso"
-cp -f espanso/src/res/macos/icon.icns "$ENGINE_APP/Contents/Resources/icon.icns"
-echo "APPL????" > "$ENGINE_APP/Contents/PkgInfo"
-cat > "$ENGINE_APP/Contents/Info.plist" <<PLIST
+# The engine goes in its OWN nested sub-app ("Expandr Agent") with its own bundle
+# id, so it doesn't claim the outer app's LaunchServices identity (which would
+# make `open` poke the background agent instead of launching the GUI window). The
+# folder name is what macOS shows in Login Items & Extensions.
+AGENT_APP="$APP/Contents/Helpers/Expandr Agent.app"
+mkdir -p "$AGENT_APP/Contents/MacOS" "$AGENT_APP/Contents/Resources"
+cp "$ENGINE_BIN" "$AGENT_APP/Contents/MacOS/espanso"
+cp -f espanso/src/res/macos/icon.icns "$AGENT_APP/Contents/Resources/icon.icns"
+echo "APPL????" > "$AGENT_APP/Contents/PkgInfo"
+cat > "$AGENT_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key>               <string>Engine Agent</string>
-  <key>CFBundleDisplayName</key>        <string>Engine Agent</string>
-  <key>CFBundleIdentifier</key>         <string>${BUNDLE_ID}.engine</string>
+  <key>CFBundleName</key>               <string>Expandr Agent</string>
+  <key>CFBundleDisplayName</key>        <string>Expandr Agent</string>
+  <key>CFBundleIdentifier</key>         <string>${BUNDLE_ID}.agent</string>
   <key>CFBundleExecutable</key>         <string>espanso</string>
   <key>CFBundleIconFile</key>           <string>icon</string>
   <key>CFBundlePackageType</key>        <string>APPL</string>
@@ -158,8 +158,8 @@ sign_helper "$APP/Contents/Frameworks/Sparkle.framework"
 # Then our code, inside-out: form helper, engine, GUI, then the outer bundle.
 sign "$APP/Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm"
 sign "$APP/Contents/Helpers/ExpandrForm.app"
-sign "$ENGINE_APP/Contents/MacOS/espanso"
-sign "$ENGINE_APP"
+sign "$AGENT_APP/Contents/MacOS/espanso"
+sign "$AGENT_APP"
 sign "$APP/Contents/MacOS/ExpandrSnippets"
 sign "$APP"
 
