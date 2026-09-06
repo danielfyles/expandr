@@ -17,6 +17,9 @@ struct ExpandrSnippetsApp: App {
         .defaultSize(width: 980, height: 640)
         .defaultPosition(.center)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Expandr") { showAboutPanel() }
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
@@ -28,4 +31,30 @@ struct ExpandrSnippetsApp: App {
             SettingsView(store: store)
         }
     }
+}
+
+/// Show a standard About panel that also links to the expandr.app holding page.
+/// Name, icon and version come from Info.plist automatically; we add the credits.
+private func showAboutPanel() {
+    let credits = NSMutableAttributedString(
+        string: "A native macOS text expander.\n\n",
+        attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+    let link = NSMutableAttributedString(
+        string: "expandr.app",
+        attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .link: URL(string: "https://expandr.app")!,
+        ])
+    credits.append(link)
+
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = .center
+    credits.addAttribute(.paragraphStyle, value: paragraph,
+                         range: NSRange(location: 0, length: credits.length))
+
+    NSApp.activate(ignoringOtherApps: true)
+    NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
 }
