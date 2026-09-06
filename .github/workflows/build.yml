@@ -1,0 +1,53 @@
+name: Build check
+
+# Compile-and-assemble check for the Expandr macOS app. Runs the same
+# build_expandr_app.sh the maintainer uses locally (minus Developer ID signing
+# and notarization — CI has no certs, so it falls back to ad-hoc signing), so a
+# green run means the engine, the SwiftUI GUI and the form helper all build and
+# the bundle assembles cleanly. It does not notarize or release.
+
+on:
+  push:
+    branches: [dev, main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "images/**"
+      - ".github/ISSUE_TEMPLATE/**"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "images/**"
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: Build (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustc --version
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build & assemble Expandr.app
+        run: ./scripts/build_expandr_app.sh --build-engine
+
+      - name: Sanity-check the bundle layout
+        run: |
+          APP="target/mac/Expandr.app"
+          test -x "$APP/Contents/MacOS/ExpandrSnippets"
+          test -x "$APP/Contents/Helpers/Expandr Agent.app/Contents/MacOS/espanso"
+          test -x "$APP/Contents/Helpers/ExpandrForm.app/Contents/MacOS/ExpandrForm"
+          echo "bundle layout OK"
