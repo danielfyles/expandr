@@ -162,7 +162,9 @@ final class SnippetStore: ObservableObject {
 
         sources = loadedSources
         categories = allCategories
-        loadError = (matchDir == nil) ? "Could not locate espanso's config directory." : nil
+        loadError = (matchDir == nil)
+            ? NSLocalizedString("Could not locate Expandr's snippets folder.", comment: "load error")
+            : nil
     }
 
     /// Re-check availability and reload if it changed — e.g. the user just made a
@@ -265,14 +267,14 @@ final class SnippetStore: ObservableObject {
     @discardableResult
     func addCategory(named rawName: String, in sourceID: UUID) -> SnippetCategory.ID? {
         guard let source = sources.first(where: { $0.id == sourceID }) else {
-            loadError = "Unknown source."; return nil
+            loadError = NSLocalizedString("Unknown source.", comment: "error"); return nil
         }
-        guard !source.isReadOnly else { loadError = "That source is read-only."; return nil }
+        guard !source.isReadOnly else { loadError = NSLocalizedString("That source is read-only.", comment: "error"); return nil }
         let url = uniqueURL(for: sanitizedFileName(rawName), ext: "yml", in: source.url)
         do {
             try "matches: []\n".write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            loadError = "Couldn't create category: \(error.localizedDescription)"
+            loadError = String(format: NSLocalizedString("Couldn't create category: %@", comment: "error"), error.localizedDescription)
             return nil
         }
         // Reload from disk so the new file is picked up and tagged to the right
@@ -294,7 +296,7 @@ final class SnippetStore: ObservableObject {
         do {
             try FileManager.default.moveItem(at: categories[ci].url, to: url)
         } catch {
-            loadError = "Couldn't rename category: \(error.localizedDescription)"
+            loadError = String(format: NSLocalizedString("Couldn't rename category: %@", comment: "error"), error.localizedDescription)
             return
         }
         categories[ci].url = url
@@ -308,7 +310,7 @@ final class SnippetStore: ObservableObject {
         do {
             try FileManager.default.trashItem(at: categories[ci].url, resultingItemURL: nil)
         } catch {
-            loadError = "Couldn't delete \(categories[ci].name): \(error.localizedDescription)"
+            loadError = String(format: NSLocalizedString("Couldn't delete %@: %@", comment: "error: category name, reason"), categories[ci].name, error.localizedDescription)
             return
         }
         categories.remove(at: ci)
@@ -389,7 +391,7 @@ final class SnippetStore: ObservableObject {
             try yaml.write(to: category.url, atomically: true, encoding: .utf8)
             loadError = nil
         } catch {
-            loadError = "Couldn't save \(category.name): \(error.localizedDescription)"
+            loadError = String(format: NSLocalizedString("Couldn't save %@: %@", comment: "error: category name, reason"), category.name, error.localizedDescription)
         }
     }
 

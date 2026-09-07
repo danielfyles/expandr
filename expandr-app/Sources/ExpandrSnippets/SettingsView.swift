@@ -209,8 +209,8 @@ struct SourcesSettingsView: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Add Source"
-        panel.message = "Choose a folder containing (or to contain) snippet files in YAML format."
+        panel.prompt = NSLocalizedString("Add Source", comment: "open-panel confirm button")
+        panel.message = NSLocalizedString("Choose a folder containing (or to contain) snippet files in YAML format.", comment: "open-panel message")
         if panel.runModal() == .OK, let url = panel.url {
             store.addSource(url)
         }

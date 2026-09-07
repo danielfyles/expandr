@@ -90,6 +90,14 @@ install_name_tool -add_rpath "@executable_path/../Frameworks" \
   "$APP/Contents/MacOS/ExpandrSnippets" 2>/dev/null || true
 
 cp -f espanso/src/res/macos/icon.icns "$APP/Contents/Resources/icon.icns"
+
+# Localization: copy each <lang>.lproj/Localizable.strings into Contents/Resources
+# so Bundle.main resolves the SwiftUI / NSLocalizedString keys. Uses find rather
+# than a glob because `set -f` above disables globbing. Adding a language is just
+# adding a folder under expandr-app/Localization/ExpandrSnippets/.
+[[ -d expandr-app/Localization/ExpandrSnippets ]] && \
+  find expandr-app/Localization/ExpandrSnippets -maxdepth 1 -name '*.lproj' \
+    -exec cp -R {} "$APP/Contents/Resources/" \;
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp espanso-ui/fonts/Fraunces.ttf  "$APP/Contents/Resources/Fonts/"
 cp espanso-ui/fonts/Newsreader.ttf "$APP/Contents/Resources/Fonts/"
@@ -105,6 +113,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key>               <string>Expandr</string>
   <key>CFBundleDisplayName</key>        <string>Expandr</string>
+  <key>CFBundleDevelopmentRegion</key>  <string>en</string>
   <key>CFBundleIdentifier</key>         <string>${BUNDLE_ID}</string>
   <key>CFBundleExecutable</key>         <string>ExpandrSnippets</string>
   <key>CFBundlePackageType</key>        <string>APPL</string>

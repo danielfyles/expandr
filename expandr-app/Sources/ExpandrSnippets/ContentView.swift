@@ -602,7 +602,7 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             let name = store.sources.first { $0.id == newCategorySourceID }?.displayName
-            Text("Creates a new folder of snippets in \(name ?? "this source").")
+            Text("Creates a new folder of snippets in \(name ?? NSLocalizedString("this source", comment: "fallback source name")).")
         }
         .onChange(of: renameFieldFocused) { focused in
             // Blur commits the in-place rename (unless Esc already cancelled it).
@@ -918,7 +918,7 @@ struct SnippetEditor: View {
         }
     }
 
-    @ViewBuilder private func section(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+    @ViewBuilder private func section(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(BrandFont.heading(15, weight: 600))
             content()
@@ -1125,7 +1125,7 @@ struct VariableRow: View {
         )
     }
 
-    @ViewBuilder private func labeled(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+    @ViewBuilder private func labeled(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
             content()
@@ -1143,10 +1143,10 @@ extension View {
 
 /// Minimal fallback for ContentUnavailableView (macOS 14+) so we run on macOS 13.
 struct ContentUnavailableCompat: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
-    let message: String?
-    init(_ title: String, systemImage: String, message: String? = nil) {
+    let message: LocalizedStringKey?
+    init(_ title: LocalizedStringKey, systemImage: String, message: LocalizedStringKey? = nil) {
         self.title = title
         self.systemImage = systemImage
         self.message = message

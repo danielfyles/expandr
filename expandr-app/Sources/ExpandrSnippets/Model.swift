@@ -24,7 +24,7 @@ struct Snippet: Identifiable, Hashable {
     var primaryText: String {
         if let first = triggers.first, !first.isEmpty { return first }
         if let regex, !regex.isEmpty { return regex }
-        return label ?? "(untitled)"
+        return label ?? NSLocalizedString("(untitled)", comment: "placeholder for a snippet with no label")
     }
 
     /// Secondary/preview text shown under the primary.
@@ -42,7 +42,7 @@ struct Snippet: Identifiable, Hashable {
             ?? (raw["form"] as? String) ?? ""
         let oneLine = body.replacingOccurrences(of: "\n", with: " ")
         if !oneLine.isEmpty { return oneLine }
-        return triggers.first ?? regex ?? "(untitled)"
+        return triggers.first ?? regex ?? NSLocalizedString("(untitled)", comment: "placeholder for a snippet with no label")
     }
 
     /// Second line in the list: the expansion trigger(s).
@@ -140,7 +140,9 @@ struct SnippetSource: Identifiable, Codable, Hashable {
     static let builtInID = UUID(uuidString: "00000000-0000-0000-0000-0000000E5A50")!
 
     var url: URL { URL(fileURLWithPath: path) }
-    var displayName: String { isBuiltIn ? "My Snippets" : url.lastPathComponent }
+    var displayName: String {
+        isBuiltIn ? NSLocalizedString("My Snippets", comment: "name of the built-in snippets source") : url.lastPathComponent
+    }
 }
 
 /// One match file (`match/<name>.yml`) — maps to a category in the sidebar.

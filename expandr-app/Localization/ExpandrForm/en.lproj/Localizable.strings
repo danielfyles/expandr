@@ -1,0 +1,7 @@
+/* Expandr — source-language (English) catalog.
+   Keys are the English strings used in code. To add a language, copy this
+   file to <lang>.lproj/Localizable.strings and translate the right-hand
+   values only. %@ is a placeholder filled in at runtime — keep it. */
+
+"Cancel" = "Cancel";
+"Submit" = "Submit";

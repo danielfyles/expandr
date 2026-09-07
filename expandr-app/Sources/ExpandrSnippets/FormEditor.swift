@@ -253,7 +253,7 @@ struct FormFieldRow: View, Equatable {
             })
     }
 
-    @ViewBuilder private func labeled(_ title: String, width: CGFloat, @ViewBuilder _ content: () -> some View) -> some View {
+    @ViewBuilder private func labeled(_ title: LocalizedStringKey, width: CGFloat, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
             content()
@@ -261,7 +261,7 @@ struct FormFieldRow: View, Equatable {
         .frame(width: width)
     }
 
-    @ViewBuilder private func labeledBlock(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+    @ViewBuilder private func labeledBlock(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
             content()

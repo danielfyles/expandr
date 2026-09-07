@@ -37,7 +37,7 @@ struct ExpandrSnippetsApp: App {
 /// Name, icon and version come from Info.plist automatically; we add the credits.
 private func showAboutPanel() {
     let credits = NSMutableAttributedString(
-        string: "A native macOS text expander.\n\n",
+        string: NSLocalizedString("A native macOS text expander.", comment: "About panel tagline") + "\n\n",
         attributes: [
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: NSColor.secondaryLabelColor,

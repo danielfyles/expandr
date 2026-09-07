@@ -25,6 +25,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/$EXE_NAME"
 # Place the resource bundle where Bundle.module can find it (Contents/Resources).
 [ -d "$RES_BUNDLE" ] && cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
+# Localization: <lang>.lproj/Localizable.strings → Contents/Resources (find, not a
+# glob — `set -f` disables globbing). Adding a language = adding a folder.
+[ -d "$HERE/Localization/ExpandrForm" ] && \
+  find "$HERE/Localization/ExpandrForm" -maxdepth 1 -name '*.lproj' \
+    -exec cp -R {} "$APP/Contents/Resources/" \;
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -32,6 +37,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>              <string>Expandr Form</string>
+  <key>CFBundleDevelopmentRegion</key> <string>en</string>
   <key>CFBundleIdentifier</key>        <string>app.expandr.form</string>
   <key>CFBundleExecutable</key>        <string>ExpandrForm</string>
   <key>CFBundlePackageType</key>       <string>APPL</string>
