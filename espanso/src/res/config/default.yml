@@ -1,52 +1,31 @@
-# espanso configuration file
-
-# yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/config.schema.json
-
-# For a complete introduction, visit the official docs at: https://espanso.org/docs/
-
-# You can use this file to define the global configuration options for espanso.
-# These are the parameters that will be used by default on every application,
-# but you can also override them on a per-application basis.
-
-# To make customization easier, this file contains some of the commonly used
-# parameters. Feel free to uncomment and tune them to fit your needs!
+# Expandr configuration file
+#
+# Global options for the Expandr engine. These apply in every application (they
+# can also be overridden per app). The commonly tuned ones are listed below,
+# commented out — uncomment and change any you need.
+# For the full list of options, see the Expandr README: github.com/danielfyles/expandr
 
 # --- Toggle key
-
-# Customize the key used to disable and enable espanso (when double tapped)
-# Available options: CTRL, SHIFT, ALT, CMD, OFF
-# You can also specify the key variant, such as LEFT_CTRL, RIGHT_SHIFT, etc...
+# The key that pauses/resumes Expandr when double-tapped.
+# Options: CTRL, SHIFT, ALT, CMD, OFF (or one side, e.g. LEFT_CTRL, RIGHT_SHIFT)
 # toggle_key: ALT
-# You can also disable the toggle key completely with
-# toggle_key: OFF
+# toggle_key: OFF   # disable the toggle key entirely
 
-# --- Injection Backend
-
-# Espanso supports multiple ways of injecting text into applications. Each of
-# them has its quirks, therefore you may want to change it if you are having problems.
-# By default, espanso uses the "Auto" backend which should work well in most cases,
-# but you may want to try the "Clipboard" or "Inject" backend in case of issues.
+# --- Injection backend
+# How Expandr types the text. "Auto" works for most apps; try "Clipboard" or
+# "Inject" if a particular app misbehaves.
 # backend: Clipboard
 
 # --- Auto-restart
-
-# Enable/disable the config auto-reload after a file change is detected.
+# Reload automatically when a config or snippet file changes.
 # auto_restart: false
 
 # --- Clipboard threshold
-
-# Because injecting long texts char-by-char is a slow operation, espanso automatically
-# uses the clipboard if the text is longer than 'clipboard_threshold' characters.
+# Typing long text character-by-character is slow, so replacements longer than
+# this many characters are pasted via the clipboard instead.
 # clipboard_threshold: 100
 
-# --- Regex Buffer Size
-
-# The maximum number of characters to hold in memory for regex triggers.
-# This value determines the maximum length of a regex trigger that can be
-# matched by espanso and by default have 30 chars.
-# It's advisable to keep this value reasonably low.
-# You might want to increase this value if you have very long triggers,
-# at the cost of higher memory usage.
+# --- Regex buffer size
+# Max characters kept in memory for regex triggers (i.e. the longest regex
+# trigger you can match). Keep it small; raise it only for very long triggers.
 # max_regex_buffer_size: 30
-
-# For a list of all the available options, visit the official docs at: https://espanso.org/docs/
