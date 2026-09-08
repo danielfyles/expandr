@@ -959,7 +959,7 @@ struct SnippetEditor: View {
         .pickerStyle(.segmented)
         .controlSize(.small)
         .labelsHidden()
-        .frame(width: 170)
+        .fixedSize()   // natural width, so its right edge sits flush with the text area
     }
 
     @ViewBuilder private var bodyNotes: some View {
