@@ -24,7 +24,7 @@ use crate::{
     },
     lock::acquire_daemon_lock,
 };
-use log::error;
+use log::{error, info};
 
 use super::{CliModule, CliModuleArgs};
 
@@ -219,14 +219,33 @@ fn launcher_main(args: CliModuleArgs) -> i32 {
         .paths_overrides
         .expect("missing paths overrides in launcher main");
 
-    // On macOS, request Accessibility permission (required to detect and inject
-    // text). This raises the system prompt attributed to this app; if it's not
-    // yet granted the daemon still launches but won't expand until the user
-    // grants it and the service restarts.
+    // On macOS, Accessibility permission is required to detect and inject text,
+    // and it must be granted BEFORE the worker starts: the keyboard event tap is
+    // created at worker startup and one created without permission never
+    // recovers (a first install would then not expand until a restart). So
+    // prompt once, then wait here — the launcher is headless — until the user
+    // grants it, and only then launch the daemon. The grant is live: no process
+    // restart is needed for the check to flip.
     #[cfg(target_os = "macos")]
     {
         if !accessibility::is_accessibility_enabled() {
             accessibility::prompt_enable_accessibility();
+            let started = std::time::Instant::now();
+            let mut last_log = std::time::Instant::now();
+            while !accessibility::is_accessibility_enabled() {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if last_log.elapsed().as_secs() >= 30 {
+                    info!(
+                        "waiting for Accessibility permission to be granted ({}s so far)",
+                        started.elapsed().as_secs()
+                    );
+                    last_log = std::time::Instant::now();
+                }
+            }
+            info!(
+                "Accessibility granted after {}s; starting the daemon",
+                started.elapsed().as_secs()
+            );
         }
     }
 
