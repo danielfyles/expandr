@@ -1,34 +1,40 @@
-# espanso match file
-
-# For a complete introduction, visit the official docs at: https://espanso.org/docs/
-
-# You can use this file to define the base matches (aka snippets)
-# that will be available in every application when using espanso.
-
-# Matches are substitution rules: when you type the "trigger" string
-# it gets replaced by the "replace" string.
-
-# yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/match.schema.json
+# Expandr match file — your snippets live here.
+#
+# Each entry below is a snippet: type the "trigger" anywhere and it is replaced
+# with the "replace" text. This starter set shows what Expandr can do — edit it,
+# delete it, or add your own, in the Expandr app or right here.
+# (Mind the indentation: this is YAML.)
 
 matches:
-  # Simple text replacement
-  - trigger: ":espanso"
-    replace: "Hi there!"
+  # 1. A plain replacement — type :expandr to check everything is working.
+  - trigger: ":expandr"
+    replace: "Hi there! Expandr is working."
 
-  # NOTE: espanso uses YAML to define matches, so pay attention to the indentation!
+  # 2. Multi-line text — the classic email sign-off. Edit it to be yours.
+  - trigger: ":sig"
+    replace: |-
+      Best regards,
+      Your Name
 
-  # But matches can also be dynamic:
-
-  # Print the current date
+  # 3. Today's date, via a variable. The format uses strftime codes
+  #    (%d day, %B month name, %Y year) — see www.strfti.me for the full list.
   - trigger: ":date"
-    replace: "{{mydate}}"
+    replace: "{{today}}"
     vars:
-      - name: mydate
+      - name: today
         type: date
         params:
-          format: "%m/%d/%Y"
+          format: "%d %B %Y"
 
-  # Print the output of a shell command
+  # 4. Whatever is on your clipboard. Wrap it in anything you like — for example
+  #    "[{{clipboard}}]({{clipboard}})" turns a copied URL into a Markdown link.
+  - trigger: ":clip"
+    replace: "{{clipboard}}"
+    vars:
+      - name: clipboard
+        type: clipboard
+
+  # 5. The output of a shell command.
   - trigger: ":shell"
     replace: "{{output}}"
     vars:
@@ -37,4 +43,18 @@ matches:
         params:
           cmd: "echo 'Hello from your shell'"
 
-  # And much more! For more information, visit the docs: https://espanso.org/docs/
+  # 6. A fill-in form. Type the trigger and Expandr asks for the [[fields]]
+  #    before inserting the text. Fields are free text unless you describe them
+  #    under form_fields — here "when" becomes a pick-list.
+  - trigger: ":intro"
+    form: |-
+      Hi [[name]],
+
+      Thanks for getting in touch about [[topic]]. I'll come back to you properly by [[when]].
+    form_fields:
+      when:
+        type: choice
+        values:
+          - tomorrow
+          - the end of the week
+          - Monday
