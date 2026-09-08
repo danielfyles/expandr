@@ -532,17 +532,15 @@ struct ContentView: View {
             .background(alignment: .bottom) { SidebarWatermark() }
             .opacity(isSearching ? 0.45 : 1)
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 4) {
-                    Spacer()
+            // Preferences lives in the sidebar's toolbar, just left of the
+            // system's sidebar-toggle button (which is pinned at the trailing edge).
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
                     Button(action: openSettings) {
-                        Image(systemName: "gearshape")
+                        Label("Preferences", systemImage: "gearshape")
                     }
-                    .buttonStyle(.borderless)
                     .help("Preferences")
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
             }
         } content: {
             // ---- Middle: snippets (a category's, or global search results) ----
