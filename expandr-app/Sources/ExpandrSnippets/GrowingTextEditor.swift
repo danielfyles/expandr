@@ -69,7 +69,7 @@ struct GrowingTextEditor: NSViewRepresentable {
     }
 }
 
-final class GrowingNSTextView: NSTextView {
+class GrowingNSTextView: NSTextView {
     var minHeightConstant: CGFloat = 54
     var placeholder: String = ""
 

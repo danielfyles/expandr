@@ -408,7 +408,22 @@ final class SnippetStore: ObservableObject {
         }
         if let label = s.label, !label.isEmpty { d["label"] = label } else { d.removeValue(forKey: "label") }
         if let regex = s.regex, !regex.isEmpty { d["regex"] = regex }
-        if let replace = s.replace { d["replace"] = replace }
+        // The body key follows the snippet's kind, so switching a snippet between
+        // plain (`replace`) and rich (`markdown`) in the editor swaps the key on
+        // save; an HTML snippet converted to plain drops its `html` key. Kinds the
+        // editor doesn't touch (form, image, other) keep whatever they had.
+        switch s.kind {
+        case .replace:
+            if let replace = s.replace { d["replace"] = replace }
+            d.removeValue(forKey: "markdown")
+            d.removeValue(forKey: "html")
+        case .markdown:
+            if let markdown = s.markdown { d["markdown"] = markdown }
+            d.removeValue(forKey: "replace")
+            d.removeValue(forKey: "html")
+        default:
+            if let replace = s.replace { d["replace"] = replace }
+        }
         d.removeValue(forKey: "vars")
         if !s.vars.isEmpty { d["vars"] = s.vars.map(varToDict) }
         return d
@@ -436,6 +451,7 @@ final class SnippetStore: ObservableObject {
             triggers: triggers,
             regex: m["regex"] as? String,
             replace: m["replace"] as? String,
+            markdown: m["markdown"] as? String,
             kind: kind,
             vars: vars,
             raw: m
