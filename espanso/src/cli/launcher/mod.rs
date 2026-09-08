@@ -228,12 +228,20 @@ fn launcher_main(args: CliModuleArgs) -> i32 {
     // restart is needed for the check to flip.
     #[cfg(target_os = "macos")]
     {
+        // Go headless FIRST: this launcher process is long-lived (launchd's parent
+        // for the daemon), and if it is still a regular app while the Accessibility
+        // prompt is up, macOS draws a Dock tile for it that never goes away.
+        espanso_mac_utils::convert_to_background_app();
         if !accessibility::is_accessibility_enabled() {
             accessibility::prompt_enable_accessibility();
+            // AXIsProcessTrusted stays STALE in a process that was already running
+            // when the user granted access (only a fresh process gets the current
+            // answer — that's why "restart the app" fixes it). So poll by spawning
+            // this same binary as `accessibility-status` and reading its exit code.
             let started = std::time::Instant::now();
             let mut last_log = std::time::Instant::now();
-            while !accessibility::is_accessibility_enabled() {
-                std::thread::sleep(std::time::Duration::from_millis(500));
+            while !accessibility_granted_fresh() {
+                std::thread::sleep(std::time::Duration::from_secs(1));
                 if last_log.elapsed().as_secs() >= 30 {
                     info!(
                         "waiting for Accessibility permission to be granted ({}s so far)",
@@ -259,12 +267,25 @@ fn launcher_main(args: CliModuleArgs) -> i32 {
         preferences.set_completed_wizard(true);
     }
 
-    // Hide the Dock icon (the engine runs headless) and start the daemon.
-    #[cfg(target_os = "macos")]
-    {
-        espanso_mac_utils::convert_to_background_app();
-    }
     daemon::launch_daemon(&paths_overrides).expect("failed to launch daemon");
 
     LAUNCHER_SUCCESS
+}
+
+/// Accessibility check that survives a grant made while we were running: the
+/// in-process check first (fast path), then a fresh child process's verdict via
+/// the `accessibility-status` subcommand.
+#[cfg(target_os = "macos")]
+fn accessibility_granted_fresh() -> bool {
+    if accessibility::is_accessibility_enabled() {
+        return true;
+    }
+    let Ok(exe) = std::env::current_exe() else { return false };
+    std::process::Command::new(exe)
+        .arg("accessibility-status")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }

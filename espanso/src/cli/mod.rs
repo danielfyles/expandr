@@ -23,6 +23,7 @@ use crate::path::Paths;
 use clap::ArgMatches;
 use espanso_config::{config::ConfigStore, error::NonFatalErrorSet, matches::store::MatchStore};
 
+pub mod accessibility_status;
 pub mod cmd;
 pub mod daemon;
 pub mod edit;
