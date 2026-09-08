@@ -22,7 +22,7 @@ APP="target/mac/Expandr.app"
 COMPONENT="target/mac/Expandr-component.pkg"
 DIST="target/mac/distribution.xml"
 RES="target/mac/pkg-resources"
-OUT="target/mac/Expandr-${EXPANDR_VERSION}.pkg"
+OUT="target/mac/Expandr.pkg"
 
 echo "==> Building component package…"
 pkgbuild --component "$APP" --install-location /Applications \

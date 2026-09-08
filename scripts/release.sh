@@ -32,7 +32,7 @@ V="$EXPANDR_VERSION"
 TAG="v$V"
 APP="target/mac/Expandr.app"
 ZIP="target/mac/Expandr-$V.zip"           # temporary: only to submit the .app for notarization
-PKG="target/mac/Expandr-$V.pkg"           # installer wizard
+PKG="target/mac/Expandr.pkg"           # installer wizard
 APPCAST="target/mac/appcast.xml"
 SIGN_UPDATE="$REPO/scripts/sparkle-tools/bin/sign_update"
 DL_BASE="https://github.com/$GH_REPO/releases/download/$TAG"
@@ -80,7 +80,7 @@ cat > "$APPCAST" <<XML
       <sparkle:version>$V</sparkle:version>
       <sparkle:shortVersionString>$V</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-      <enclosure url="$DL_BASE/Expandr-$V.pkg" $SIG_LINE sparkle:installationType="package" type="application/octet-stream"/>
+      <enclosure url="$DL_BASE/Expandr.pkg" $SIG_LINE sparkle:installationType="package" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
@@ -95,5 +95,5 @@ fi
 echo "==> [6/6] Publishing GitHub release $TAG …"
 gh release create "$TAG" "$PKG" "$APPCAST" \
   --repo "$GH_REPO" --title "Expandr $V" \
-  --notes "Expandr $V — download **Expandr-$V.pkg** and open it to install. Existing installs update automatically. (appcast.xml is the auto-update feed; you don't need it.)"
+  --notes "Expandr $V — download **Expandr.pkg** and open it to install. Existing installs update automatically. (appcast.xml is the auto-update feed; you don't need it.)"
 echo "released: https://github.com/$GH_REPO/releases/tag/$TAG"
