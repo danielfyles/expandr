@@ -10,6 +10,7 @@ struct Snippet: Identifiable, Hashable {
     var triggers: [String]      // from `trigger` (single) or `triggers` (list)
     var regex: String?
     var replace: String?        // plain-text replacement (the common case)
+    var markdown: String? = nil // rich-text replacement, stored as Markdown (`markdown:`)
     var kind: EffectKind
     var vars: [SnippetVar]      // {{name}} variables referenced by the body
 
@@ -60,6 +61,7 @@ struct Snippet: Identifiable, Hashable {
             && lhs.triggers == rhs.triggers
             && lhs.regex == rhs.regex
             && lhs.replace == rhs.replace
+            && lhs.markdown == rhs.markdown
             && lhs.kind == rhs.kind
             && lhs.vars.count == rhs.vars.count
     }

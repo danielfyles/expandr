@@ -681,6 +681,8 @@ struct SnippetEditor: View {
     let onDelete: () -> Void
     @State private var previewError: String?
     @StateObject private var insertionTarget = TextInsertionTarget()
+    @StateObject private var richController = RichTextController()
+    @State private var confirmPlainSwitch = false
 
     var body: some View {
         ScrollView {
@@ -709,14 +711,37 @@ struct SnippetEditor: View {
                 // Replacement comes last: it stitches together the trigger, form
                 // fields and variables into the final output.
                 if editor.replaceEditable {
-                    section("Replacement", accessory: { cursorMarkerButton }) {
-                        GrowingTextEditor(text: $editor.replace, minHeight: 120,
-                                          isEditable: !isReadOnly,
-                                          insertionTarget: insertionTarget)
+                    section("Replacement", accessory: {
+                        HStack(spacing: 10) { cursorMarkerButton; bodyModePicker }
+                    }) {
+                        bodyNotes
+                        if editor.bodyMode == .rich {
+                            VStack(spacing: 6) {
+                                RichFormattingBar(controller: richController)
+                                RichTextEditor(text: $editor.richBody, minHeight: 120,
+                                               isEditable: !isReadOnly,
+                                               insertionTarget: insertionTarget,
+                                               controller: richController)
+                            }
                             .padding(6)
                             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12)
                                 .strokeBorder(Color.brandSage, lineWidth: 2.5))
+                        } else {
+                            GrowingTextEditor(text: $editor.replace, minHeight: 120,
+                                              isEditable: !isReadOnly,
+                                              insertionTarget: insertionTarget)
+                                .padding(6)
+                                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.brandSage, lineWidth: 2.5))
+                        }
+                    }
+                    .alert("Switch to plain text?", isPresented: $confirmPlainSwitch) {
+                        Button("Switch", role: .destructive) { editor.switchToPlain() }
+                        Button("Keep formatting", role: .cancel) {}
+                    } message: {
+                        Text("Bold, lists, links and other formatting will be removed.")
                     }
                 } else {
                     let kind = editor.snippet?.kind.rawValue ?? "this"
@@ -918,6 +943,36 @@ struct SnippetEditor: View {
         }
     }
 
+    /// Plain ⇄ rich. Going rich is lossless; going plain asks first when there is
+    /// formatting to lose.
+    private var bodyModePicker: some View {
+        Picker("", selection: Binding(
+            get: { editor.bodyMode },
+            set: { newMode in
+                if newMode == .rich { editor.switchToRich() }
+                else if editor.richHasFormatting { confirmPlainSwitch = true }
+                else { editor.switchToPlain() }
+            })) {
+            Text("Plain text").tag(EditorModel.BodyMode.plain)
+            Text("Rich text").tag(EditorModel.BodyMode.rich)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.small)
+        .labelsHidden()
+        .fixedSize()   // natural width, so its right edge sits flush with the text area
+    }
+
+    @ViewBuilder private var bodyNotes: some View {
+        if editor.convertedFromHTML {
+            Text("This snippet was HTML. Its formatting has been removed; saving keeps the plain text.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        if editor.bodyMode == .rich && editor.hasUnsupportedMarkdown {
+            Text("Some of this snippet's Markdown isn't supported by the editor; saving will simplify it.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
     @ViewBuilder private func section(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(BrandFont.heading(15, weight: 600))
@@ -944,7 +999,9 @@ struct SnippetEditor: View {
     /// at the end of the replacement.
     private var cursorMarkerButton: some View {
         // espanso honours a single marker, so disable once one is present.
-        let alreadyPlaced = editor.replace.contains("$|$")
+        let alreadyPlaced = editor.bodyMode == .rich
+            ? editor.richBody.string.contains("$|$")
+            : editor.replace.contains("$|$")
         return Button {
             insertionTarget.insert("$|$")
         } label: {
