@@ -528,6 +528,8 @@ struct ContentView: View {
             // section's rows when `categories` is reassigned live (e.g. after
             // adding a folder), so key the List on a content signature.
             .id(sidebarSignature)
+            // Pale panda watermark at the foot of the sidebar, behind the rows.
+            .background(alignment: .bottom) { SidebarWatermark() }
             .opacity(isSearching ? 0.45 : 1)
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) {
