@@ -32,6 +32,7 @@
 "Couldn't save %@: %@" = "Couldn't save %@: %@";
 "Create" = "Create";
 "Creates a new folder of snippets in %@." = "Creates a new folder of snippets in %@.";
+"Cursor here" = "Cursor here";
 "Custom date/time format (uses strftime syntax)" = "Custom date/time format (uses strftime syntax)";
 "Custom…" = "Custom…";
 "Default (optional)" = "Default (optional)";
@@ -52,6 +53,7 @@
 "Format" = "Format";
 "General" = "General";
 "In Finder, right-click the folder and choose “Make available offline”." = "In Finder, right-click the folder and choose “Make available offline”.";
+"Insert $|$ — where the cursor will be after the snippet expands" = "Insert $|$ — where the cursor will be after the snippet expands";
 "Insert dynamic values — dates, shell output, the clipboard and more" = "Insert dynamic values — dates, shell output, the clipboard and more";
 "Insert each variable in the Replacement text using its variable name inside curly brackets like this: {{example}}" = "Insert each variable in the Replacement text using its variable name inside curly brackets like this: {{example}}";
 "Insert {{%@}} into the body" = "Insert {{%@}} into the body";
