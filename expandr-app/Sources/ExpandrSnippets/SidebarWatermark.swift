@@ -10,7 +10,7 @@ struct SidebarWatermark: View {
     // Tuning knobs.
     static let maxWidth: CGFloat = 256      // cap; otherwise fills the sidebar width
     static let sideMargin: CGFloat = 12     // breathing room at the column edges
-    static let bottomPadding: CGFloat = 0   // sits at the foot; the gear row overlaps its base
+    static let bottomPadding: CGFloat = 0   // flush with the foot of the sidebar
     static let opacity: Double = 0.2        // on top of the already-pale tint
 
     private static let glyph: NSImage? = {
