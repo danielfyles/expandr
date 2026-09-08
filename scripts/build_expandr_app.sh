@@ -46,7 +46,7 @@ echo "==> Building ExpandrForm helper…"
 FORM_APP="expandr-app/build/ExpandrForm.app"
 
 # --- 3. Assemble the bundle ---------------------------------------------------
-echo "==> Assembling $APP…"
+echo "==> Assembling ${APP}…"
 rm -rf -- "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
