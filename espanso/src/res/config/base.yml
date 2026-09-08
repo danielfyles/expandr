@@ -47,9 +47,31 @@ matches:
   #    stored as Markdown and pasted as formatted text; edit them visually in the
   #    Expandr app by switching the Replacement to "Rich text".
   - trigger: ":agenda"
+    label: Agenda
     markdown: |-
       ## Agenda
 
       - **Updates** from everyone
       - Blockers and decisions
       - _Next steps_ and owners
+
+  # 7. A form that feeds a calculation: type the two prices, get the discount.
+  #    Variables can chain — the shell variable reads the form's answers.
+  - trigger: "|discount"
+    label: Calculate discount % rate
+    replace: "{{rate}}%"
+    vars:
+      - name: form1
+        type: form
+        params:
+          layout: |-
+            Full price: [[full]]
+            Discounted price: [[discounted]]
+          fields:
+            full: {}
+            discounted: {}
+      - name: rate
+        type: shell
+        params:
+          cmd: |-
+            awk -v full="{{form1.full}}" -v disc="{{form1.discounted}}" 'BEGIN { printf "%.1f", (1 - disc/full) * 100 }'
