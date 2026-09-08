@@ -709,7 +709,7 @@ struct SnippetEditor: View {
                 // Replacement comes last: it stitches together the trigger, form
                 // fields and variables into the final output.
                 if editor.replaceEditable {
-                    section("Replacement") {
+                    section("Replacement", accessory: { cursorMarkerButton }) {
                         GrowingTextEditor(text: $editor.replace, minHeight: 120,
                                           isEditable: !isReadOnly,
                                           insertionTarget: insertionTarget)
@@ -923,6 +923,37 @@ struct SnippetEditor: View {
             Text(title).font(BrandFont.heading(15, weight: 600))
             content()
         }
+    }
+
+    /// A section whose heading carries a trailing accessory (e.g. a small button).
+    @ViewBuilder private func section(_ title: LocalizedStringKey,
+                                      @ViewBuilder accessory: () -> some View,
+                                      @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(BrandFont.heading(15, weight: 600))
+                Spacer()
+                accessory()
+            }
+            content()
+        }
+    }
+
+    /// Drops the cursor marker `$|$` at the insertion point, exactly like
+    /// inserting a variable. After expansion the caret lands there instead of
+    /// at the end of the replacement.
+    private var cursorMarkerButton: some View {
+        Button {
+            insertionTarget.insert("$|$")
+        } label: {
+            Text("Cursor here")
+                .font(.system(size: 10, weight: .semibold))
+                .textCase(.uppercase)
+                .kerning(0.6)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .help("Insert $|$ — where the cursor will be after the snippet expands")
     }
 }
 
