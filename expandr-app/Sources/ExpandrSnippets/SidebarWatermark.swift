@@ -8,9 +8,10 @@ import AppKit
 /// bundle resource, in which case nothing is drawn.
 struct SidebarWatermark: View {
     // Tuning knobs.
-    static let width: CGFloat = 128         // glyph width in points
+    static let maxWidth: CGFloat = 256      // cap; otherwise fills the sidebar width
+    static let sideMargin: CGFloat = 12     // breathing room at the column edges
     static let bottomPadding: CGFloat = 60  // clears the gear row, with room to spare
-    static let opacity: Double = 0.4        // on top of the already-pale tint
+    static let opacity: Double = 0.2        // on top of the already-pale tint
 
     private static let glyph: NSImage? = {
         guard let url = Bundle.main.url(forResource: "panda-outline", withExtension: "png"),
@@ -25,7 +26,8 @@ struct SidebarWatermark: View {
                 .resizable()
                 .renderingMode(.template)
                 .aspectRatio(contentMode: .fit)
-                .frame(width: Self.width)
+                .frame(maxWidth: Self.maxWidth)
+                .padding(.horizontal, Self.sideMargin)
                 .foregroundStyle(.tertiary)
                 .opacity(Self.opacity)
                 .padding(.bottom, Self.bottomPadding)
