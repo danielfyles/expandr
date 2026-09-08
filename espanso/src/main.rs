@@ -72,6 +72,7 @@ static CLI_HANDLERS: LazyLock<Vec<CliModule>> = LazyLock::new(|| {
         cli::env_path::new(),
         cli::service::new(),
         cli::workaround::new(),
+        cli::accessibility_status::new(),
         cli::package::new(),
         cli::match_cli::new(),
         cli::cmd::new(),
@@ -455,6 +456,10 @@ SubCommand::with_name("install")
             .about("Attempt to disable secure input by automating the common steps."),
         )
         .about("A collection of workarounds to solve some common problems."),
+    )
+    .subcommand(
+      SubCommand::with_name("accessibility-status")
+        .about("Exit 0 if Accessibility permission is granted (macOS)."),
     )
     .subcommand(
       SubCommand::with_name("worker")
