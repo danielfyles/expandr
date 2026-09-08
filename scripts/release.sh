@@ -94,6 +94,6 @@ if [[ "$DRY_RUN" == 1 ]]; then
 fi
 echo "==> [6/6] Publishing GitHub release $TAG …"
 gh release create "$TAG" "$PKG" "$APPCAST" \
-  --repo "$GH_REPO" --title "Expandr $V" \
+  --repo "$GH_REPO" --title "Expandr $V" --target "$(git rev-parse HEAD)" \
   --notes "Expandr $V — download **Expandr.pkg** and open it to install. Existing installs update automatically. (appcast.xml is the auto-update feed; you don't need it.)"
 echo "released: https://github.com/$GH_REPO/releases/tag/$TAG"
