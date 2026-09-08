@@ -2,7 +2,7 @@
 
 > *A native macOS text expander and snippet builder.*
 
-[![Build check](https://github.com/litter-free/expandr/actions/workflows/build.yml/badge.svg)](https://github.com/litter-free/expandr/actions/workflows/build.yml)
+[![Build check](https://github.com/danielfyles/expandr/actions/workflows/build.yml/badge.svg)](https://github.com/danielfyles/expandr/actions/workflows/build.yml)
 
 Expandr lets you type a short **trigger** (say `:addr`) and have it instantly
 replaced with **something longer** — an address, a canned reply, a code snippet,
