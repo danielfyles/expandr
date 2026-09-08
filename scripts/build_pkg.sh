@@ -7,7 +7,7 @@
 # background engine on first launch, so no install scripts are needed.
 #
 # Prereq: target/mac/Expandr.app must already be built (scripts/build_expandr_app.sh).
-# Output: target/mac/Expandr-<version>.pkg
+# Output: target/mac/Expandr.pkg
 
 set -Eeuf -o pipefail
 
@@ -23,9 +23,30 @@ COMPONENT="target/mac/Expandr-component.pkg"
 DIST="target/mac/distribution.xml"
 RES="target/mac/pkg-resources"
 OUT="target/mac/Expandr.pkg"
+STAGE="target/mac/pkgroot"                       # payload root: Expandr.app at top level
+CPLIST="target/mac/Expandr-component.plist"
 
-echo "==> Building component package…"
-pkgbuild --component "$APP" --install-location /Applications \
+# Build the component from a staged root with an explicit component plist so the
+# app bundle is NOT relocatable. By default macOS Installer "relocates": if it finds
+# an existing bundle with the same id anywhere (a build checkout, an old copy in
+# Downloads), it installs THERE instead of /Applications — which is exactly what
+# bit us. Non-relocatable means the payload always lands in /Applications.
+echo "==> Building component package (non-relocatable)…"
+rm -rf "$STAGE"; mkdir -p "$STAGE"
+ditto "$APP" "$STAGE/Expandr.app"
+pkgbuild --analyze --root "$STAGE" "$CPLIST" >/dev/null
+python3 - "$CPLIST" <<'PLIST'
+import plistlib, sys
+p = sys.argv[1]
+with open(p, "rb") as f: bundles = plistlib.load(f)
+def pin(bs):                       # top-level AND nested (ChildBundles) — all non-relocatable
+    for b in bs:
+        b["BundleIsRelocatable"] = False
+        pin(b.get("ChildBundles", []))
+pin(bundles)
+with open(p, "wb") as f: plistlib.dump(bundles, f)
+PLIST
+pkgbuild --root "$STAGE" --component-plist "$CPLIST" --install-location /Applications \
   --identifier "app.expandr.pkg" --version "$EXPANDR_VERSION" "$COMPONENT"
 
 echo "==> Preparing wizard resources (GPL licence)…"
@@ -62,5 +83,5 @@ else
     --package-path "target/mac" "$OUT"
 fi
 
-rm -f "$COMPONENT"
+rm -rf "$COMPONENT" "$STAGE" "$CPLIST"
 echo "built: $OUT"
