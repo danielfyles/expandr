@@ -712,7 +712,7 @@ struct SnippetEditor: View {
                 // fields and variables into the final output.
                 if editor.replaceEditable {
                     section("Replacement", accessory: {
-                        HStack(spacing: 10) { bodyModePicker; cursorMarkerButton }
+                        HStack(spacing: 10) { cursorMarkerButton; bodyModePicker }
                     }) {
                         bodyNotes
                         if editor.bodyMode == .rich {
