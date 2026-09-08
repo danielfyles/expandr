@@ -1,4 +1,4 @@
-display alert "Espanso wasn't able to automatically disable secure input. Sometimes locking and unlocking the screen helps, do you want to try?" buttons {"No", "Yes"} default button "Yes"
+display alert "Expandr couldn't switch off Secure Input automatically. Locking and unlocking your screen usually clears it — try that now?" buttons {"No", "Yes"} default button "Yes"
 if button returned of result = "No" then
   return "no"
 else
