@@ -33,7 +33,6 @@
 "Couldn't save %@: %@" = "%@ konnte nicht gesichert werden: %@";
 "Create" = "Erstellen";
 "Creates a new folder of snippets in %@." = "Erstellt einen neuen Ordner mit Textbausteinen in %@.";
-"Cursor here" = "Cursor hier";
 "Custom date/time format (uses strftime syntax)" = "Eigenes Datums-/Zeitformat (strftime-Syntax)";
 "Custom…" = "Eigenes…";
 "Default (optional)" = "Standard (optional)";
@@ -55,6 +54,7 @@
 "General" = "Allgemein";
 "In Finder, right-click the folder and choose “Make available offline”." = "Klicke im Finder mit der rechten Maustaste auf den Ordner und wähle „Offline verfügbar machen“.";
 "Insert $|$ — where the cursor will be after the snippet expands" = "$|$ einfügen — dort steht der Cursor nach dem Erweitern des Textbausteins";
+"Insert cursor" = "Cursor einfügen";
 "Insert dynamic values — dates, shell output, the clipboard and more" = "Dynamische Werte einfügen — Datum, Shell-Ausgabe, Zwischenablage und mehr";
 "Insert each variable in the Replacement text using its variable name inside curly brackets like this: {{example}}" = "Füge jede Variable in den Ersetzungstext ein, indem du ihren Namen in doppelte geschweifte Klammern setzt, z. B.: {{example}}";
 "Insert {{%@}} into the body" = "{{%@}} in den Text einfügen";

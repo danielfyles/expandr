@@ -32,7 +32,6 @@
 "Couldn't save %@: %@" = "No se pudo guardar %@: %@";
 "Create" = "Crear";
 "Creates a new folder of snippets in %@." = "Crea una nueva carpeta de fragmentos en %@.";
-"Cursor here" = "Cursor aquí";
 "Custom date/time format (uses strftime syntax)" = "Formato de fecha/hora personalizado (sintaxis strftime)";
 "Custom…" = "Personalizado…";
 "Default (optional)" = "Predeterminado (opcional)";
@@ -54,6 +53,7 @@
 "General" = "General";
 "In Finder, right-click the folder and choose “Make available offline”." = "En el Finder, haz clic derecho en la carpeta y elige “Disponible sin conexión”.";
 "Insert $|$ — where the cursor will be after the snippet expands" = "Insertar $|$: donde quedará el cursor tras expandir el fragmento";
+"Insert cursor" = "Insertar cursor";
 "Insert dynamic values — dates, shell output, the clipboard and more" = "Inserta valores dinámicos: fechas, salida de la terminal, el portapapeles y más";
 "Insert each variable in the Replacement text using its variable name inside curly brackets like this: {{example}}" = "Inserta cada variable en el texto de reemplazo usando su nombre entre llaves dobles, así: {{example}}";
 "Insert {{%@}} into the body" = "Insertar {{%@}} en el cuerpo";

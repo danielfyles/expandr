@@ -943,16 +943,23 @@ struct SnippetEditor: View {
     /// inserting a variable. After expansion the caret lands there instead of
     /// at the end of the replacement.
     private var cursorMarkerButton: some View {
-        Button {
+        // espanso honours a single marker, so disable once one is present.
+        let alreadyPlaced = editor.replace.contains("$|$")
+        return Button {
             insertionTarget.insert("$|$")
         } label: {
-            Text("Cursor here")
-                .font(.system(size: 10, weight: .semibold))
-                .textCase(.uppercase)
-                .kerning(0.6)
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down.square")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Insert cursor")
+                    .font(.system(size: 10, weight: .semibold))
+                    .textCase(.uppercase)
+                    .kerning(0.6)
+            }
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
+        .disabled(alreadyPlaced)
         .help("Insert $|$ — where the cursor will be after the snippet expands")
     }
 }
