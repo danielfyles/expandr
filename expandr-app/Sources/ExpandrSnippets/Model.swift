@@ -4,7 +4,7 @@ import Foundation
 /// explicitly; the full original mapping is kept in `raw` so writing a file back
 /// never drops fields we don't yet understand.
 struct Snippet: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()   // carried over across reloads (see SnippetStore.load)
 
     var label: String?
     var triggers: [String]      // from `trigger` (single) or `triggers` (list)
@@ -149,7 +149,7 @@ struct SnippetSource: Identifiable, Codable, Hashable {
 
 /// One match file (`match/<name>.yml`) — maps to a category in the sidebar.
 struct SnippetCategory: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()   // carried over across reloads (see SnippetStore.load)
     var url: URL
     var snippets: [Snippet]
 
