@@ -103,6 +103,8 @@ cp espanso-ui/fonts/Fraunces.ttf  "$APP/Contents/Resources/Fonts/"
 cp espanso-ui/fonts/Newsreader.ttf "$APP/Contents/Resources/Fonts/"
 [[ -f expandr-app/Resources/offline-fix.png ]] && \
   cp expandr-app/Resources/offline-fix.png "$APP/Contents/Resources/offline-fix.png"
+[[ -f expandr-app/Resources/panda-outline.png ]] && \
+  cp expandr-app/Resources/panda-outline.png "$APP/Contents/Resources/panda-outline.png"
 
 echo "APPL????" > "$APP/Contents/PkgInfo"
 
