@@ -43,18 +43,13 @@ matches:
         params:
           cmd: "echo 'Hello from your shell'"
 
-  # 6. A fill-in form. Type the trigger and Expandr asks for the [[fields]]
-  #    before inserting the text. Fields are free text unless you describe them
-  #    under form_fields — here "when" becomes a pick-list.
-  - trigger: ":intro"
-    form: |-
-      Hi [[name]],
+  # 6. Rich text — a heading, a list, some bold and italics. Rich snippets are
+  #    stored as Markdown and pasted as formatted text; edit them visually in the
+  #    Expandr app by switching the Replacement to "Rich text".
+  - trigger: ":agenda"
+    markdown: |-
+      ## Agenda
 
-      Thanks for getting in touch about [[topic]]. I'll come back to you properly by [[when]].
-    form_fields:
-      when:
-        type: choice
-        values:
-          - tomorrow
-          - the end of the week
-          - Monday
+      - **Updates** from everyone
+      - Blockers and decisions
+      - _Next steps_ and owners
