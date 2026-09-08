@@ -1,5 +1,6 @@
 import Foundation
 import Yams
+import os
 
 /// Loads espanso match files from the built-in match dir plus any additional
 /// (user-added) source folders, into categories/snippets grouped by source.
@@ -12,6 +13,13 @@ final class SnippetStore: ObservableObject {
 
     let matchDir: URL?
     private let defaultsKey = "additionalSources"
+    /// One watcher per source folder, so files that appear or change on disk —
+    /// the agent writing the first-run starters, a new file dropped in, a cloud
+    /// sync — show up without a relaunch.
+    private var watchers: [URL: FolderWatcher] = [:]
+    /// Our own writes trigger folder events too; ignore reloads inside this window.
+    private var suppressReloadsUntil = Date.distantPast
+    private static let log = Logger(subsystem: "app.expandr", category: "store")
 
     init() {
         self.matchDir = EspansoPaths.matchDir()
@@ -22,6 +30,7 @@ final class SnippetStore: ObservableObject {
         // doesn't needlessly trigger an espanso reload on every launch.
         updateEspansoIncludes()
         load()
+        startWatching()
     }
 
     // MARK: - Sources
@@ -160,8 +169,20 @@ final class SnippetStore: ObservableObject {
             allCategories += categories(in: source.url, source: source, fm: fm)
         }
 
+        // Keep ids stable across reloads (same file → same category id; same
+        // position → same snippet id) so the sidebar selection and the editor's
+        // save target survive a reload triggered by a change on disk.
+        let previous = categories
+        for i in allCategories.indices {
+            guard let old = previous.first(where: { $0.url.standardizedFileURL == allCategories[i].url.standardizedFileURL }) else { continue }
+            allCategories[i].id = old.id
+            for j in allCategories[i].snippets.indices where j < old.snippets.count {
+                allCategories[i].snippets[j].id = old.snippets[j].id
+            }
+        }
         sources = loadedSources
         categories = allCategories
+        startWatching()
         loadError = (matchDir == nil)
             ? NSLocalizedString("Could not locate Expandr's snippets folder.", comment: "load error")
             : nil
@@ -341,6 +362,28 @@ final class SnippetStore: ObservableObject {
         categories.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    // MARK: - Watching
+
+    /// Watch every source folder; (re)create watchers as sources change. The
+    /// built-in folder is created if missing so it can be watched on a fresh
+    /// install, where the agent writes the starter files moments after launch.
+    private func startWatching() {
+        var wanted: [URL] = []
+        if let builtIn = builtInSource {
+            try? FileManager.default.createDirectory(at: builtIn.url, withIntermediateDirectories: true)
+            wanted.append(builtIn.url.standardizedFileURL)
+        }
+        wanted += additionalSources.map { $0.url.standardizedFileURL }
+        for url in watchers.keys where !wanted.contains(url) { watchers[url] = nil }
+        for url in wanted where watchers[url] == nil {
+            watchers[url] = FolderWatcher(url: url) { [weak self] in
+                guard let self, Date() >= self.suppressReloadsUntil else { return }
+                Self.log.notice("reloading snippets after a change in \(url.path, privacy: .public)")
+                self.load()
+            }
+        }
+    }
+
     // MARK: - Writing
 
     /// Replace a snippet in its category and write the file back to disk.
@@ -383,6 +426,7 @@ final class SnippetStore: ObservableObject {
     }
 
     private func writeFile(_ category: SnippetCategory) {
+        suppressReloadsUntil = Date().addingTimeInterval(1.5)   // it's our own change
         var top = category.rawTop
         top["matches"] = category.snippets.map(Self.snippetToDict)
         do {
@@ -487,4 +531,30 @@ final class SnippetStore: ObservableObject {
         if params.isEmpty { d.removeValue(forKey: "params") } else { d["params"] = params }
         return d
     }
+}
+
+/// Fires (debounced) when entries in a folder are added, removed or renamed.
+/// Content edits to an existing file are not folder events; espanso's own writes
+/// and atomic saves are, which covers the cases that matter here.
+final class FolderWatcher {
+    private let source: DispatchSourceFileSystemObject
+    private var pending: DispatchWorkItem?
+
+    init?(url: URL, onChange: @escaping () -> Void) {
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .rename, .delete, .attrib, .extend], queue: .main)
+        self.source = source
+        source.setEventHandler { [weak self] in
+            self?.pending?.cancel()
+            let item = DispatchWorkItem(block: onChange)
+            self?.pending = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: item)
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+    }
+
+    deinit { source.cancel() }
 }
