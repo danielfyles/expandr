@@ -6,6 +6,13 @@ struct ContentView: View {
     @State private var selectedCategoryID: SnippetCategory.ID?
     @State private var selectedSnippetIDs: Set<Snippet.ID> = []
     @State private var dropTargetID: SnippetCategory.ID?
+    // Pinned rather than left to SwiftUI's automatic resolution: on some macOS
+    // versions, letting NavigationSplitView infer column visibility itself can
+    // make its resolved column count change at runtime, which trips a known
+    // AppKit/SwiftUI bug where the unified toolbar's translucency and the
+    // sidebar divider break and never repair themselves (even across relaunch).
+    // Pinning to `.all` keeps the column count — and the toolbar chrome — stable.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     // New-category / rename / delete dialogs
     @State private var showNewCategory = false
@@ -508,7 +515,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             // ---- Left: categories (files) ----
             // While searching, drop the selection highlight and dim the sidebar.
             List(selection: Binding(get: { isSearching ? nil : selectedCategoryID },
@@ -839,14 +846,24 @@ struct SnippetEditor: View {
     }
 
     /// Wrap content behind one continuous left rule + indent, reaching the right edge.
+    ///
+    /// Deliberately an overlay pinned to the content's own leading edge rather
+    /// than a separate `RoundedRectangle` sibling in an `HStack` — the sibling
+    /// form relies on SwiftUI matching two independently flexible views' height
+    /// against each other, which stopped resolving correctly on macOS 27 (the
+    /// rule came out only as tall as the first grouped section, e.g. Form,
+    /// instead of running past Variables too, even with an explicit
+    /// `.frame(maxHeight: .infinity)` on the shape). An overlay is always sized
+    /// to match the exact view it's laid over, so there's no such negotiation.
     @ViewBuilder private func lined<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Color.secondary.opacity(0.3))
-                .frame(width: 2)
-            VStack(alignment: .leading, spacing: 18) { content() }
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        VStack(alignment: .leading, spacing: 18) { content() }
+            .padding(.leading, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.secondary.opacity(0.3))
+                    .frame(width: 2)
+            }
     }
 
     /// Variable rows on the slate-blue surface, with the add button.
