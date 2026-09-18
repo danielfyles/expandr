@@ -37,7 +37,7 @@ fn get_builtin_patches() -> Vec<PatchDefinition> {
     ];
 
     #[cfg(target_os = "macos")]
-    return vec![];
+    return vec![patches::mac::google_docs_mac::patch()];
 
     #[cfg(target_os = "linux")]
     return vec![
